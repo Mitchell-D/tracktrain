@@ -5,11 +5,38 @@ from tensorflow.keras.losses import MeanSquaredError, KLDivergence
 from tensorflow.keras.saving import register_keras_serializable
 
 import tracktrain.model_methods as mm
+from tracktrain.utils import validate_keys
+
+vae_mandatory_args = ("model_name", "num_inputs", "num_outputs", "num_latent",
+                      "enc_node_list", "dec_node_list", "dropout_rate",
+                      "batchnorm", "enc_dense_kwargs", "dec_dense_kwargs")
+vae_arg_descriptions = {
+    "model_name":" String name of this model (for naming output files)",
+    "num_inputs": "Number of inputs received by the model.",
+    "num_outputs": "Number of outputs predicted by the model",
+    "num_latent": "Dimensionality of the latent distribution.",
+    "enc_node_list": "List of ints corresponding to the width of each" + \
+            "encoder layer in number of nodes.",
+    "dec_node_list":"List of ints corresponding to the width of each " + \
+            "decoder layer in number of nodes.",
+    "dropout_rate":"Ratio of random nodes disabled during training",
+    "batchnorm": "If True, normalizes layer-wise activation amounts.",
+    "enc_dense_kwargs": "dict of args to init encoder Dense layers.",
+    "dec_dense_kwargs": "dict of args to init decoder Dense layers.",
+    }
+vae_arg_defaults = {
+        "batchnorm":True,
+        "dropout_rate":0.0,
+        "enc_dense_kwargs":{},
+        "dec_dense_kwargs":{},
+        }
+
 
 @register_keras_serializable(package="variational")
 class VariationalEncoderDecoder(Model):
     """
     Class implementing tf.keras.Model for a variational encoder-decoder with
+    the following architecture:
 
     (1) A series of Dense layers for the encoder.
     (2) A num_latent-dimensional gaussian parameterization of the mean and
@@ -19,6 +46,24 @@ class VariationalEncoderDecoder(Model):
     (5) Output a num_inputs value
     """
     @staticmethod
+    @register_keras_serializable(package="variational")
+    def from_config(config):
+        """
+        initialize a VariationalEncoderDecoder from a configuration file that
+        minimally has
+        """
+        ## Add defaults for any missing arguments; user config gets precedent.
+        config = {**vae_arg_defaults, **config}
+        validate_keys(
+            mandatory_keys=vae_mandatory_args,
+            received_keys=list(vae_config.keys()),
+            source_name="VariationalEncoderDecoder",
+            descriptions=vae_arg_descriptions,
+            )
+        return VariationalEncoderDecoder(**config)
+
+    @staticmethod
+    @register_keras_serializable(package="variational")
     def sample(mean, log_var):
         """
         The reparameterization trick. Sample a value from a normal
@@ -30,10 +75,12 @@ class VariationalEncoderDecoder(Model):
         :@param mean: (batch,num_latent) input tensor for mean parameter
         :@param log_var: (batch,num_latent) input tensor for log variance
         """
+        assert mean.shape == log_var.shape
         epsilon = tf.random.normal(shape=tf.shape(mean))
         return mean + tf.exp(0.5 * log_var) * epsilon
 
     @staticmethod
+    @register_keras_serializable(package="variational")
     def kl_loss(mean, log_var):
         """
         Calculate the KL divergence loss
@@ -59,22 +106,20 @@ class VariationalEncoderDecoder(Model):
         sequence of feedforward layers encoding a num_latent dimensional
         distribution.
 
-        :@param num_latent:
-            Dimensionality of the latent distribution
-        :@param enc_node_list:
-            List of ints corresponding to encoder layer node counts
-        :@param dec_node_list:
-            List of ints corresponding to decoder layer node counts
-        :@param dropout_rate:
-            Ratio of encoder/decoder nodes disabled during training
-        :@param batchnorm:
-            If True, normalizes layer-wise activation magnitudes.
-        :@param enc_dense_kwargs:
-            dict of args to provide to init encoder Dense layers
-        :@param dec_dense_kwargs:
-            dict of args to provide to init decoder Dense layers
+        :@param model_name: String name of this model (for naming output files)
+        :@param num_inputs: Number of inputs received by the model.
+        :@param num_outputs: Number of outputs predicted by the model
+        :@param num_latent: Dimensionality of the latent distribution.
+        :@param enc_node_list: List of ints corresponding to the width of each
+            encoder layer in number of nodes.
+        :@param dec_node_list:List of ints corresponding to the width of each
+            decoder layer in number of nodes.
+        :@param dropout_rate: Ratio of random nodes disabled during training
+        :@param batchnorm: If True, normalizes layer-wise activation amounts.
+        :@param enc_dense_kwargs: dict of args to init encoder Dense layers.
+        :@param dec_dense_kwargs: dict of args to init decoder Dense layers.
         """
-        super(VariationalEncoderDecoder, self).__init__(self, args, kwargs)
+        super(VariationalEncoderDecoder, self).__init__(self, *args, **kwargs)
         self.model_name = model_name
         self.num_latent = num_latent
         self.num_inputs = num_inputs
@@ -174,7 +219,8 @@ class VariationalEncoderDecoder(Model):
         self.compiled_metrics.update_state(Y, P, W)
         return {m.name: m.result() for m in self.metrics}
 
-    def compile(self, optimizer, loss, metrics, weighted_metrics=None):
+    def compile(self, optimizer, loss, metrics, weighted_metrics=None,
+                *args, **kwargs):
         """
         Override the compile method to capture user arguments
 
@@ -185,29 +231,47 @@ class VariationalEncoderDecoder(Model):
         :@param metrics: List of metrics or keras.metrics object
         """
         super().compile(optimizer=optimizer, loss=loss, metrics=metrics,
-                        weighted_metrics=weighted_metrics)
-        self.model_optimizer = optimizer
-        self.loss_fn = loss
+                        weighted_metrics=weighted_metrics, *args, **kwargs)
+        self.optimizer = optimizer
+        self.loss_fn = tf.keras.losses.deserialize(loss)
         self.loss_metrics = metrics
+        return self
 
     def get_compile_config(self):
         """
         Return parameters that need to be serialized to save
         """
         return {
-                "model_optimizer":self.model_optimizer,
-                "loss":self.loss_fn,
-                "metric":self.loss_metrics,
-                }
+            "optimizer":self.optimizer,
+            "loss":tf.keras.losses.serialize(self.loss_fn),
+            "metrics":self.loss_metrics,
+            }
 
     def compile_from_config(self, config):
         # Deserializes the compile parameters (important, since many are custom)
-        optimizer = keras.utils.deserialize_keras_object(
-                config.get("model_optimizer"))
-        loss_fn = keras.utils.deserialize_keras_object(
-                config.get("loss"))
-        metrics = keras.utils.deserialize_keras_object(
-                config.get("metric"))
-
+        optimizer = config.get("optimizer")
+        loss_fn = tf.keras.losses.deserialize(config.get("loss"))
+        metrics = config.get("metrics")
         # Calls compile with the deserialized parameters
         self.compile(optimizer=optimizer, loss=loss_fn, metrics=metrics)
+
+if __name__=="__main__":
+    """ Unit test for encoder-decoder """
+    ved = VariationalEncoderDecoder(
+            model_name="test",
+            num_inputs=8,
+            num_outputs=2,
+            num_latent=8,
+            enc_node_list=[64,64,32,16],
+            dec_node_list=[16,16],
+            )
+    def myloss(y,p):
+        return (y-p)**2
+    ved.compile(
+            optimizer="adam",
+            loss=myloss,
+            metrics=["mse", "mae"],
+            )
+    cfg = ved.get_compile_config()
+    ved.compile_from_config(cfg)
+    ved.compile_from_config({"optimizer":"sgd", "loss":"mae", "metrics":"mse"})
