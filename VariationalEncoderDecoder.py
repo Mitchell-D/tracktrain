@@ -8,6 +8,31 @@ import tracktrain.model_methods as mm
 
 @register_keras_serializable(package="variational")
 class VariationalEncoderDecoder(Model):
+    """
+    Class implementing tf.keras.Model for a variational encoder-decoder with
+
+    (1) A series of Dense layers for the encoder.
+    (2) A num_latent-dimensional gaussian parameterization of the mean and
+        standard deviation of the latent posterior P(z|x).
+    (3) A routine for sampling a latent vector z from the latent distriubtions.
+    (4) A series of Dense layers for the decoder.
+    (5) Output a num_inputs value
+    """
+    @staticmethod
+    def sample(mean, log_var):
+        """
+        The reparameterization trick. Sample a value from a normal
+        distribution given the encoder's mean and log variance.
+
+        See this blog post:
+        https://gregorygundersen.com/blog/2018/04/29/reparameterization/
+
+        :@param mean: (batch,num_latent) input tensor for mean parameter
+        :@param log_var: (batch,num_latent) input tensor for log variance
+        """
+        epsilon = tf.random.normal(shape=tf.shape(mean))
+        return mean + tf.exp(0.5 * log_var) * epsilon
+
     @staticmethod
     def kl_loss(mean, log_var):
         """
@@ -33,6 +58,21 @@ class VariationalEncoderDecoder(Model):
         Initialize a variational encoder-decoder model, consisting of a
         sequence of feedforward layers encoding a num_latent dimensional
         distribution.
+
+        :@param num_latent:
+            Dimensionality of the latent distribution
+        :@param enc_node_list:
+            List of ints corresponding to encoder layer node counts
+        :@param dec_node_list:
+            List of ints corresponding to decoder layer node counts
+        :@param dropout_rate:
+            Ratio of encoder/decoder nodes disabled during training
+        :@param batchnorm:
+            If True, normalizes layer-wise activation magnitudes.
+        :@param enc_dense_kwargs:
+            dict of args to provide to init encoder Dense layers
+        :@param dec_dense_kwargs:
+            dict of args to provide to init decoder Dense layers
         """
         super(VariationalEncoderDecoder, self).__init__(self, args, kwargs)
         self.model_name = model_name
@@ -84,20 +124,6 @@ class VariationalEncoderDecoder(Model):
                 outputs=self.decoder_output,
                 )
         self.build(input_shape=(None,num_inputs,))
-
-    def sample(self, mean, log_var):
-        """
-        The reparameterization trick. Sample a value from a normal
-        distribution given the encoder's mean and log variance.
-
-        See this blog post:
-        https://gregorygundersen.com/blog/2018/04/29/reparameterization/
-
-        :@param mean: (batch,num_latent) input tensor for mean parameter
-        :@param log_var: (batch,num_latent) input tensor for log variance
-        """
-        epsilon = tf.random.normal(shape=tf.shape(mean))
-        return mean + tf.exp(0.5 * log_var) * epsilon
 
     def call(self, inputs, return_params=False):
         """

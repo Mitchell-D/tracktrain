@@ -192,7 +192,7 @@ def compile_and_build_dir(
     ## Write a summary of the model to a file
     if print_summary:
         ## Write a model summary to stdout and to a file
-        model.summary()
+        model.summary(expand_nested=True)
     summary_path = model_dir.joinpath(
             compile_config.get("model_name")+"_summary.txt")
     with summary_path.open("w") as f:
@@ -321,17 +321,9 @@ def train(model_dir, train_config:dict, compiled_model:Model,
     return best_model
 
 if __name__=="__main__":
-    """ Directory with sub-directories for each model. """
-    data_dir = Path("data")
-    model_parent_dir = data_dir.joinpath("models")
-    asos_al_path = data_dir.joinpath("AL_ASOS_July_2023.csv")
-    asos_ut_path = data_dir.joinpath("UT_ASOS_Mar_2023.csv")
-    input_feats = ["tmpc","dwpc","relh","sknt", "mslp","p01m","gust","feel"]
-    #input_feats = ["tmpc","relh","sknt","mslp"]
-    output_feats = ["romps_LCL_m","lcl_estimate"]
     config = {
             ## Meta-info
-            "model_name":"test-2",
+            "model_name":"test-7",
             "num_inputs":len(input_feats),
             "num_outputs":len(output_feats),
             "data_source":asos_al_path.as_posix(),
@@ -341,7 +333,7 @@ if __name__=="__main__":
             "dense_kwargs":{"activation":"sigmoid"},
 
             ## Exclusive to variational encoder-decoder
-            "latent_size":8,
+            "num_latent":8,
             "enc_node_list":[128,128,128,64,32],
             "dec_node_list":[16,16],
             "dropout_rate":0.1,
@@ -375,58 +367,5 @@ if __name__=="__main__":
             "mask_val":999.,
             "mask_feat_probs":None,
 
-            "notes":"same setup except some masking",
+            "notes":"Same setup byt feedforward",
             }
-
-
-    """
-    --( Exclusive to generator init for testing )--
-
-    "train_val_ratio": Ratio of training to validation samples during training
-    "mask_pct": Float mean percentage of inputs to mask during training
-    "mask_pct_stdev": Stdev of number of inputs masked during training
-    "mask_val": Number substituted for masked features
-    "mask_feat_probs": List of relative probabilities of each feat being masked
-    """
-    ## Preprocess the data
-    from preprocess import preprocess
-    data_dict = preprocess(
-            asos_csv_path=asos_al_path,
-            input_feats=input_feats,
-            output_feats=output_feats,
-            normalize=True,
-            )
-    ## Initialize the masking data generators
-    import model_methods as mm
-    gen_train,gen_val = mm.array_to_noisy_tv_gen(
-            X=data_dict["X"].astype(np.float64),
-            Y=data_dict["Y"].astype(np.float64),
-            tv_ratio=config.get("train_val_ratio"),
-            noise_pct=config.get("mask_pct"),
-            noise_stdev=config.get("mask_pct_stdev"),
-            mask_val=config.get("mask_val"),
-            feat_probs=config.get("mask_feat_probs"),
-            shuffle=True,
-            dtype=tf.float64
-            )
-    ## Initialize the model
-    #from VariationalEncoderDecoder import VariationalEncoderDecoder
-    model = VariationalEncoderDecoder(**config)
-    #model = mm.feedforward(**config)
-
-    """ All the methods below from this module are model and data agnostic """
-
-    ## Compile the model and build a directory for it
-    model,model_dir = compile_and_build_dir(
-            model=model,
-            model_parent_dir=model_parent_dir,
-            compile_config=config,
-            )
-    best_model = train(
-            model_dir=model_dir,
-            train_config=config,
-            compiled_model=model,
-            gen_training=gen_train,
-            gen_validation=gen_val,
-            )
-    print(f"Best model: {best_model.as_posix()}")
