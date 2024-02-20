@@ -3,7 +3,8 @@
 """ --( Configuration for compile_and_train.py )-- """
 
 compile_valid_args = (
-        "model_name", "learning_rate", "metrics", "loss","weighted_metrics"
+        "model_name", "learning_rate", "metrics", "loss", "weighted_metrics",
+        "input_feats", "output_feats",
         )
 compile_arg_descriptions = {
         "learning_rate":"Learning rate ceiling for Adam optimizer",

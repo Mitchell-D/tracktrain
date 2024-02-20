@@ -32,7 +32,7 @@ Dict mapping string model abbreviations to methods that take a configuration
 dictionary as a positional parameter and produce a valid Model object.
 """
 model_builders = {
-        "vae":VariationalEncoderDecoder.from_config,
+        "ved":VariationalEncoderDecoder.from_config,
         "ff":mm.feedforward_from_config,
         }
 
@@ -119,7 +119,13 @@ class ModelDir:
         self._prog = None
         self._summary = None
         self._config = None
-        self._final = None
+        self._final_weights = None
+        self._final_model = None
+
+    def __str__(self):
+        return f"ModelDir({self.dir})"
+    def __repr__(self):
+        return str(self)
 
     def summary(self):
         """ Return the {model}_summary.txt file as a string """
@@ -137,10 +143,31 @@ class ModelDir:
             self._prog = self.load_prog(as_array=True)
         return self._prog
 
-    def final(self):
+    def load_model(self, model_path=None, debug=False):
         """
-        Loads and returns the "final" model or model weights if they exist
-        in the model directory, None otherwise.
+        Loads and returns the "final" model object if it exists in the
+        model directory.
+
+        Check the state of a ModelDir instance's weights config with:
+        model_dir.config.get("save_weights_only")
+
+        The final model model file is identified by its name:
+        {model}_final.hdf5
+        """
+        if model_path is None:
+            assert self.path_final_model.exists()
+            model_path = self.path_final_model
+        if debug:
+            print(f"Loading {model_path.as_posix()}")
+        return tf.keras.saving.load_model(model_path)
+
+    def load_weights(self, weights_path:Path=None):
+        """
+        Initializes a model according to this ModelDir's configuration
+        (which requires that the model_type field to be one of the
+        model_builders  keys. Loads and returns the "final" model weights if
+        they exist in the model directory, or loads model weights from the
+        user-provided path
 
         It's up to the user to initialize the Model if there are only model
         weights available in the directory.
@@ -148,17 +175,17 @@ class ModelDir:
         Check the state of a ModelDir instance's weights config with:
         model_dir.config.get("save_weights_only")
 
-        The final model file is identified by its name:
-        {model}_final.hdf5  (OR)  {model}_final.weights.hdf5
+        The final model weights file is identified by its name:
+        {model}_final.weights.hdf5
         """
-        if self._final is None:
-            ## If not yet loaded,
-            if self.path_final_model.exists():
-                self._final = tf.keras.models.load_model(self.path_final_model)
-            elif self.path_final_weights.exists():
-                self._final = tf.keras.models.load_weights(
-                        self.path_final_weights)
-        return self._final
+        load_path = (model_path, self.path_final_weights)[model is None]
+        assert load_path.exists()
+        if self.config.get("model_type") not in model_builders.keys():
+            raise ValueError(f"model_type = {self.config.get('model_typ')}"
+                             f" must be one of {list(model_builders.keys())}")
+        model = model_builders.get(self.config.get("model_type"))(self.config)
+        model.load_weights(self.path_final_weights)
+        return model
 
     @property
     def metric_labels(self):
@@ -233,7 +260,10 @@ class ModelDir:
         """
         Update the config json to have the new keys, replacing any that exist.
 
-        Overwrites and reloads the json configuration file.
+        CAREFUL! Overwrites and reloads the json configuration file.
+
+        This is useful for retroactively updating json files that must meet
+        a newly-enforced standard, or for recategorizing models.
 
         :@param update_dict: dict mapping string config field labels to new
             json-serializable values.
@@ -244,7 +274,7 @@ class ModelDir:
         cur_config = self.config
         cur_config.update(update_dict)
         ## Overwrite the json with the new version
-        json.dump(cur_config, self.path_config.open("w"))
+        json.dump(cur_config, self.path_config.open("w"), indent=4)
         ## reset the config and reload the json by returning the property
         self._config = None
         return self.config
@@ -268,16 +298,22 @@ class ModelSet:
         """ """
         ## Validate all ModelDir objects unless check_valid is False
         assert check_valid or all(m._check_req_files() for m in model_dirs)
-        self._models = tuple(model_dirs)
+        self._model_dirs = tuple(model_dirs)
+
+    def __str__(self):
+        print("returning")
+        return ", ".join(list(map(str,self._model_dirs)))
+    def __repr__(self):
+        return str(self)
 
     @property
-    def models(self):
+    def model_dirs(self):
         """ return the model directories as a tuple """
-        return self._models
+        return self._model_dirs
     @property
     def model_names(self):
         """ Return the string names of all ModelDir objects in the ModelSet """
-        return tuple(m.name for m in self.models)
+        return tuple(m.name for m in self.model_dirs)
 
     def subset(self, rule:Callable=None, substr:str=None, check_valid=True):
         """
@@ -294,15 +330,27 @@ class ModelSet:
 
         :@return: ModelSet with all ModelDir objects meeting the conditions
         """
-        subset = self.models
+        subset = self.model_dirs
         if not rule is None:
             subset = tuple(filter(rule, subset))
         if not substr is None:
             subset = tuple(filter(lambda m:substr in m.name, subset))
         return ModelSet(subset, check_valid=check_valid)
 
+    def plot_metrics(self, metrics:list):
+        """ """
+        fig,ax = plt.subplots()
+        for md in self.model_dirs:
+            for m in metrics:
+                if m not in md.metric_labels:
+                    raise ValueError(f"{md} doesn't support metric {m}")
+                ax.plot(md.get_metric("epoch"),md.get_metric(m),label=md.name)
+        plt.show()
+
+
 if __name__=="__main__":
-    model_parent_dir = Path("/home/krttd/uah/24.s/aes690/aes690hw3/data/models")
+    model_parent_dir = Path(
+            "/home/krttd/uah/24.s/aes690/aes690hw3/data/models")
     MS = ModelSet.from_dir(model_parent_dir)
 
     is_masked = lambda m:all(
@@ -312,15 +360,15 @@ if __name__=="__main__":
     sub = MS.subset(rule=is_masked) ## Models where masking was used
     #sub = MS.subset(substr="ved") ## Variational encoder-decoders
 
-    print(list(sorted(m.name for m in sub.models)))
-    print([m.metric_labels for m in sub.models])
-    print([list(m.config.keys()) for m in sub.models])
-    print([list(m.metric_data.shape) for m in sub.models])
+    print(list(sorted(m.name for m in sub.model_dirs)))
+    print([m.metric_labels for m in sub.model_dirs])
+    print([list(m.config.keys()) for m in sub.model_dirs])
+    print([list(m.metric_data.shape) for m in sub.model_dirs])
 
     metric_labels,metric_data = zip(*[
-        ml.load_prog(as_array=True) for ml in sub.models
+        ml.load_prog(as_array=True) for ml in sub.model_dirs
         ])
-    configs = [ml._load_config() for ml in sub.models]
+    configs = [ml._load_config() for ml in sub.model_dirs]
     metric_union = set(chain(*metric_labels))
     metric_intersection = [
             m for m in metric_union

@@ -68,16 +68,17 @@ from tracktrain.config import compile_arg_defaults, train_arg_defaults
 
 ## Define the arguments that must appear in the configuration
 #os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-#'''
-os.environ['TF_XLA_FLAGS'] = '--tf_xla_enable_xla_devices'
+'''
+#os.environ['TF_XLA_FLAGS'] = '--tf_xla_enable_xla_devices'
 print(f"Tensorflow version: {tf.__version__}")
 print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
 print(tf.config.list_physical_devices())
 
 gpus = tf.config.experimental.list_physical_devices('GPU')
+
 if len(gpus):
     tf.config.experimental.set_memory_growth(gpus[0], True)
-#'''
+'''
 def compile_from_config(model, compile_config:dict):
     """
     Verify that the required keys are present, then compile the model.

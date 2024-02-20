@@ -305,7 +305,7 @@ if __name__=="__main__":
     for x,y,w in gt.batch(4):
         print("\n")
         for i in range(x.shape[0]):
-            print(f"(% masked: {w[i]:.2f}):",
+            print(f"(% unmasked: {w[i]:.2f}):",
                   [f": {v:.2f}" for v in list(x[i])]
                   )
             pass
