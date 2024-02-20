@@ -8,24 +8,14 @@ import tensorflow as tf
 from tensorflow.keras import Input,Model
 from tensorflow.keras.layers import Dropout, BatchNormalization, Layer, Dense
 
-def_dense_kwargs = {
-        "activation":"sigmoid",
-        "use_bias":True,
-        "bias_initializer":"zeros",
-        "kernel_initializer":"glorot_uniform",
-        "kernel_regularizer":None,
-        "bias_regularizer":None,
-        "activity_regularizer":None,
-        "kernel_constraint":None,
-        "bias_constraint":None,
-        }
+from tracktrain.config import dense_kwargs_default
 
 def get_dense_stack(name:str, layer_input:Layer, node_list:list,
         batchnorm=True, dropout_rate=0.0, dense_kwargs={}):
     """
     Simple stack of dense layers with optional dropout and batchnorm
     """
-    dense_kwargs = {**def_dense_kwargs.copy(), **dense_kwargs}
+    dense_kwargs = {**dense_kwargs_default.copy(), **dense_kwargs}
     l_prev = layer_input
     for i in range(len(node_list)):
         l_new = Dense(
@@ -138,10 +128,24 @@ def variational_encoder_decoder(
     ved.add_loss(kl_divergence(z_mean, z_log_var))
     return ved
 
+def feedforward_from_config(config:dict):
+    """ Just a wrapper for dumping a dictionary into the constructor """
+    return feedforward(**config)
+
 def feedforward(
         model_name:str, node_list:list, num_inputs:int, num_outputs:int,
         batchnorm=True, dropout_rate=0.0, dense_kwargs={}, **kwargs):
-    """ Just a series of dense layers with some optional parameters """
+    """
+    Just a series of dense layers with some optional parameters
+
+    :@param model_name: string name uniquely identifying the model
+    :@param node_list: List representing the node count of each Dense layer
+    :@param num_inputs: Number of features in the input layer
+    :@param num_outputs: Number of predictions in the output layer
+    :@param batchnorm: Normalizes layer activations to gaussian between layers
+    :@param dropout_rate: Percentage of nodes randomly disabled during training
+    :@param dense_kwargs: Dict of arguments to pass to all Dense layers.
+    """
     ff_in = Input(shape=(num_inputs,), name="input")
     dense = get_dense_stack(
             name=model_name,
@@ -276,7 +280,7 @@ def array_to_noisy_tv_gen(
     return gen_train,gen_val
 
 if __name__=="__main__":
-    """ Test for generator function """
+    """ Test for noisy generator function """
     input_shape = (64,9)
     output_shape = (64,2)
 

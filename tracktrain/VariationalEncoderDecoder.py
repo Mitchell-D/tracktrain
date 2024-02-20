@@ -6,30 +6,8 @@ from tensorflow.keras.saving import register_keras_serializable
 
 import tracktrain.model_methods as mm
 from tracktrain.utils import validate_keys
-
-vae_mandatory_args = ("model_name", "num_inputs", "num_outputs", "num_latent",
-                      "enc_node_list", "dec_node_list", "dropout_rate",
-                      "batchnorm", "enc_dense_kwargs", "dec_dense_kwargs")
-vae_arg_descriptions = {
-    "model_name":" String name of this model (for naming output files)",
-    "num_inputs": "Number of inputs received by the model.",
-    "num_outputs": "Number of outputs predicted by the model",
-    "num_latent": "Dimensionality of the latent distribution.",
-    "enc_node_list": "List of ints corresponding to the width of each" + \
-            "encoder layer in number of nodes.",
-    "dec_node_list":"List of ints corresponding to the width of each " + \
-            "decoder layer in number of nodes.",
-    "dropout_rate":"Ratio of random nodes disabled during training",
-    "batchnorm": "If True, normalizes layer-wise activation amounts.",
-    "enc_dense_kwargs": "dict of args to init encoder Dense layers.",
-    "dec_dense_kwargs": "dict of args to init decoder Dense layers.",
-    }
-vae_arg_defaults = {
-        "batchnorm":True,
-        "dropout_rate":0.0,
-        "enc_dense_kwargs":{},
-        "dec_dense_kwargs":{},
-        }
+from tracktrain.config import vae_valid_args, vae_arg_descriptions
+from tracktrain.config import vae_arg_defaults
 
 
 @register_keras_serializable(package="variational")
@@ -55,8 +33,8 @@ class VariationalEncoderDecoder(Model):
         ## Add defaults for any missing arguments; user config gets precedent.
         config = {**vae_arg_defaults, **config}
         validate_keys(
-            mandatory_keys=vae_mandatory_args,
-            received_keys=list(vae_config.keys()),
+            mandatory_keys=vae_valid_args,
+            received_keys=list(config.keys()),
             source_name="VariationalEncoderDecoder",
             descriptions=vae_arg_descriptions,
             )
@@ -119,7 +97,7 @@ class VariationalEncoderDecoder(Model):
         :@param enc_dense_kwargs: dict of args to init encoder Dense layers.
         :@param dec_dense_kwargs: dict of args to init decoder Dense layers.
         """
-        super(VariationalEncoderDecoder, self).__init__(self, *args, **kwargs)
+        super(VariationalEncoderDecoder, self).__init__(self)
         self.model_name = model_name
         self.num_latent = num_latent
         self.num_inputs = num_inputs
