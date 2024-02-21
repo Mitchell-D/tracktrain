@@ -84,8 +84,8 @@ class ModelDir:
         model_type = config.get("model_type")
         if model_type is None or model_builders.get(model_type) is None:
             raise ValueError(
-                    f"Config must contain model_type in ",
-                    list(model_builders.keys())
+                    f"When initializing a ModelDir, config must "
+                    "provide model_type in ", list(model_builders.keys())
                     )
         model = model_builders[model_type](config)
         model,model_dir_path = compile_and_build_dir(
@@ -235,12 +235,16 @@ class ModelDir:
                 tuple(f.name for f in self.req_files))
         return True
 
-    def load_prog(self, as_array=False):
+    def load_prog(self, as_array=True):
         """
-        Load the training progress csv from a keras CSVLogger
+        Load the training progress csv from a keras CSVLogger as a 2-tuple
+        like (labels, array) where labels is a list of unique strings, and
+        array is a (E,M) shaped array with M metrics over E epochs.
+        labels is a list of M unique strings labeling the M metrics.
 
-        :@param: if True, loads progress lists as a single (E,M) ndarray
-            for E epochs evaluated with M metrics
+        :@param as_array: if True, loads progress lists as a single (E,M)
+            ndarray for E epochs evaluated with M metrics. Otherwise, returns
+            the data as a list of 1d arrays.
         """
         if self.path_prog is None:
             raise ValueError(
