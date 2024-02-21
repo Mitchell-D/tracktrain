@@ -8,18 +8,18 @@ from tracktrain.VariationalEncoderDecoder import VariationalEncoderDecoder
 from tracktrain.ModelDir import ModelDir
 from tracktrain.compile_and_train import train
 
-""" Configuration applying to train_multiple AND train_one """
+""" Configuration for data source """
 
 data_dir = Path(".")
-#asos_path = data_dir.joinpath("AL_ASOS_July_2023.csv")
+##Directory with sub-directories for each model.
 model_parent_dir = data_dir.joinpath("models")
+#asos_path = data_dir.joinpath("AL_ASOS_July_2023.csv")
 asos_path = data_dir.joinpath("UT_ASOS_Mar_2023.csv")
 
 input_feats = ["tmpc","dwpc","relh","sknt", "mslp","p01m","gust","feel"]
 #input_feats = ["tmpc","relh","sknt","mslp"]
 output_feats = ["romps_LCL_m","lcl_estimate"]
 
-""" Directory with sub-directories for each model. """
 config = {
         ## Meta-info
         "model_name":"test-0",
