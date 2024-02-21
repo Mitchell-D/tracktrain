@@ -98,6 +98,7 @@ class ModelDir:
         return model,md
 
     def __init__(self, model_dir:Path):
+        """ Initialize a ModelDir from an existing directory """
         self.name = model_dir.name
         self.dir = model_dir
         children = [
@@ -364,11 +365,16 @@ if __name__=="__main__":
     sub = MS.subset(rule=is_masked) ## Models where masking was used
     #sub = MS.subset(substr="ved") ## Variational encoder-decoders
 
+    get_unique = lambda ll:tuple(set(chain(*ll)))
+    ## print all of the model subdirectory names
     print(list(sorted(m.name for m in sub.model_dirs)))
-    print([m.metric_labels for m in sub.model_dirs])
-    print([list(m.config.keys()) for m in sub.model_dirs])
-    print([list(m.metric_data.shape) for m in sub.model_dirs])
+    ## print list of all config keys in any model
+    print(get_unique([list(m.config.keys()) for m in sub.model_dirs]))
+    ## print list of all metric labels in any model
+    print(get_unique([m.metric_labels for m in sub.model_dirs]))
+    #print([list(m.metric_data.shape) for m in sub.model_dirs])
 
+    ## Print all available metrics and metrics common between all models
     metric_labels,metric_data = zip(*[
         ml.load_prog(as_array=True) for ml in sub.model_dirs
         ])

@@ -29,8 +29,28 @@ If training on a GPU using cuda, you may need to set the environment
 variable `XLA_FLAGS` to the package directory with:
 
 ```bash
-export XLA_FLAGS=--xla_gpu_cuda_data_dir=/path/to/cuda
+export XLA_FLAGS="--xla_gpu_cuda_data_dir=/path/to/cuda"
 ```
+
+## installation
+
+Install `tracktrain` as a package by cloning the repository and
+adding the repository directory to `$PYTHONPATH` with:
+
+```bash
+export PYTHONPATH="$PYTHONPATH:/path/to/tracktrain"
+```
+
+Next, register the package with pip by calling the following command:
+
+```bash
+pip install -e /path/to/tracktrain
+```
+
+The `-e` flag installs the package in editable mode so that custom
+changes to the configuration (for example to include your own models)
+can be imported immediately. You can leave out the flag if you don't
+intend to make any changes.
 
 ## documentation
 
