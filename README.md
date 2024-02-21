@@ -35,7 +35,7 @@ export XLA_FLAGS=--xla_gpu_cuda_data_dir=/path/to/cuda
 ## documentation
 
 <p align="center">
-  <img width="512" src="https://github.com/Mitchell-D/tracktrain/blob/main/docs/dependency-graph.png" />
+  <img width="768" src="https://github.com/Mitchell-D/tracktrain/blob/main/docs/dependency-graph.png" />
 </p>
 
 ### model directories
