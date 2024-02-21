@@ -26,7 +26,7 @@ evaluating Models within TensorFlow.
  - (python standard library)
 
 If training on a GPU using cuda, you may need to set the environment
-variable `XLA_FLAGS` to the package directory with:
+variable `XLA_FLAGS` to the cuda library's parent directory with:
 
 ```bash
 export XLA_FLAGS="--xla_gpu_cuda_data_dir=/path/to/cuda"
@@ -48,9 +48,10 @@ pip install -e /path/to/tracktrain
 ```
 
 The `-e` flag installs the package in editable mode so that custom
-changes to the configuration (for example to include your own models)
-can be imported immediately. You can leave out the flag if you don't
-intend to make any changes.
+changes to the configuration can be imported immediately (for example
+to add your own model making method to the ModelDir.model_builders
+configuration). You can leave out the flag if you don't intend to make
+any changes.
 
 ## documentation
 
