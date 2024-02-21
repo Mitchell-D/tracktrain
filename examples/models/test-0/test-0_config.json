@@ -1,0 +1,78 @@
+{
+    "model_name": "test-0",
+    "num_inputs": 8,
+    "num_outputs": 2,
+    "data_source": "UT_ASOS_Mar_2023.csv",
+    "input_feats": [
+        "tmpc",
+        "dwpc",
+        "relh",
+        "sknt",
+        "mslp",
+        "p01m",
+        "gust",
+        "feel"
+    ],
+    "output_feats": [
+        "romps_LCL_m",
+        "lcl_estimate"
+    ],
+    "model_type": "ved",
+    "rand_seed": 20240128,
+    "node_list": [
+        16,
+        16,
+        8,
+        8,
+        8,
+        8,
+        4
+    ],
+    "dense_kwargs": {
+        "activation": "relu"
+    },
+    "num_latent": 8,
+    "enc_node_list": [
+        64,
+        128,
+        64,
+        16
+    ],
+    "dec_node_list": [
+        16,
+        64,
+        128,
+        64
+    ],
+    "enc_dense_kwargs": {
+        "activation": "relu"
+    },
+    "dec_dense_kwargs": {
+        "activation": "relu"
+    },
+    "batchnorm": true,
+    "dropout_rate": 0.05,
+    "learning_rate": 1e-05,
+    "loss": "mse",
+    "metrics": [
+        "mse",
+        "mae"
+    ],
+    "weighted_metrics": [
+        "mse",
+        "mae"
+    ],
+    "early_stop_metric": "val_mse",
+    "early_stop_patience": 600,
+    "save_weights_only": true,
+    "batch_size": 64,
+    "batch_buffer": 4,
+    "max_epochs": 2048,
+    "val_frequency": 1,
+    "train_val_ratio": 0.85,
+    "mask_pct": 0.0,
+    "mask_pct_stdev": 0.0,
+    "mask_val": 9999,
+    "mask_feat_probs": null,
+    "notes": "basic feedforward for testing"
+}
