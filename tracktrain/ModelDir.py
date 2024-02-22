@@ -306,7 +306,6 @@ class ModelSet:
         self._model_dirs = tuple(model_dirs)
 
     def __str__(self):
-        print("returning")
         return ", ".join(list(map(str,self._model_dirs)))
     def __repr__(self):
         return str(self)
