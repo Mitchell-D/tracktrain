@@ -1,6 +1,6 @@
 # tracktrain
 
-`tracktrain` is an abstract framework for configuring, training, and
+`tracktrain` is an organized workflow for configuring, training, and
 evaluating Models within TensorFlow.
 
 ## capabilities
