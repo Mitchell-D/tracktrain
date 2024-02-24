@@ -2,6 +2,7 @@ import numpy as np
 import pickle as pkl
 from datetime import datetime
 from pathlib import Path
+import netCDF4 as nc
 
 valid_fields = [
         'station',          ## ASOS station contributing measurement
@@ -22,6 +23,49 @@ valid_fields = [
         'romps_LCL_m',      ## LCL from analytic calculation
         'lcl_estimate'      ## LCL from empirical estimate
         ]
+
+def load_WRFSCM_training_data(fpath):
+    """
+    Extract vegetation fraction, irrigation extent, soil moisture, land surface
+    temperature, and LST timesteps from the netCDF. Normalize them to a unit
+    gaussian distribution and return the (N,26) shaped array of vfrac,soilm,lst
+    feature data over N samples, the (N,) shaped truth data (irrication amount)
+    and the normalization coefficients as a 2-tuple (mean,stdev).
+
+    This method adapted code from Dr. Chris Phillips (NASA IMPACT)
+
+    :@return: 3-tuple (X:np.array, Y:np.array, (mean:float, stdev:float))
+    """
+    # Open the file and extract variables
+    fn = nc.Dataset(fpath)
+    vegfra = fn.variables['VEGFRA'][:] # 1-D
+    irr = fn.variables['IRR'][:]        # 1-D (the target)
+    sm = fn.variables['SM'][:]          # 1-D
+    lst = fn.variables['LST'][:]        # 2-D (samples, features)
+    time = fn.variables['SimTime'][:]   # 2-D (samples, features)
+    xlabels = ["vfrac", "soilm"] + [
+            "lst_{t.strftime('%Y%m%d-%H%M')}"
+            for i in range(lst.shape[-1])
+            ]
+    ylabels = ["irr"]
+
+    # Normalize the variables to a unit gaussian
+    vegfra = (vegfra-np.mean(vegfra))/np.std(vegfra)
+    sm = (sm-np.mean(sm))/np.std(sm)
+    lst = (lst-np.mean(lst, axis=0))/np.std(lst, axis=0)
+    irr2 = (irr-np.mean(irr))/np.std(irr)
+
+    ## Stack vegetation fraction, soil moisture, and land surface temperature
+    ## into a single (B,F) array for B samples of each of the F=26 features.
+    X = np.stack(
+            [vegfra, sm] + [lst[:,i] for i in range(lst.shape[1])],
+            axis=1
+            ).astype(np.float64)
+    y = irr2
+    y_scales = (np.mean(irr), np.std(irr))
+
+    # Return the training inputs and the targets
+    return X, y, xlabels, ylabels, y_scales
 
 def parse_csv(csv_path:Path, fields:list=None, replace_val=np.nan):
     """
