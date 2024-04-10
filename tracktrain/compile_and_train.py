@@ -230,7 +230,7 @@ def train(model_dir_path, train_config:dict, compiled_model:Model,
     else:
         out_path = model_dir_path.joinpath(
                 train_config.get("model_name") + \
-                        "_{epoch:03}_{val_loss:.03f}.hdf5",
+                        "_{epoch:03}_{val_loss:.03f}.h5",
                         )
     callbacks = {
             "early_stop":tf.keras.callbacks.EarlyStopping(
@@ -274,7 +274,7 @@ def train(model_dir_path, train_config:dict, compiled_model:Model,
     ## (!!!) This relies on the checkpoint file name formatting string, (!!!)
     ## (!!!) and on that there are no non-model .hdf5 files in the dir. (!!!)
     best_model = list(sorted(
-        [q for q in model_dir_path.iterdir() if ".hdf5" in q.suffix],
+        [q for q in model_dir_path.iterdir() if ".h5" in q.suffix],
         key=lambda p:int(p.stem.split("_")[1])
         )).pop(-1)
     ## Call the suffix so Path is {model_name}_final( .hdf5 | .weights.hdf5 )
