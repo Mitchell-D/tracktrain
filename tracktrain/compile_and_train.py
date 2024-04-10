@@ -97,7 +97,9 @@ def compile_from_config(model, compile_config:dict):
     "weighted_metrics":
         List of metric labels to  be weighted by masking level
 
+
     """
+    compile_config = {**compile_arg_defaults, **compile_config}
     validate_keys(
             mandatory_keys=compile_valid_args,
             received_keys=list(compile_config.keys()),
@@ -223,7 +225,7 @@ def train(model_dir_path, train_config:dict, compiled_model:Model,
     if train_config.get("save_weights_only"):
         out_path = model_dir_path.joinpath(
                 train_config.get('model_name') + \
-                        "_{epoch:03}_{val_loss:.03f}.weights.hdf5"
+                        "_{epoch:03}_{val_loss:.3f}.weights.h5"
                         )
     else:
         out_path = model_dir_path.joinpath(
@@ -251,8 +253,9 @@ def train(model_dir_path, train_config:dict, compiled_model:Model,
 
     ## Train the model on the generated tensors
     hist = compiled_model.fit(
-            gen_training.batch(train_config.get("batch_size")).prefetch(
-                train_config.get("batch_buffer")),
+            gen_training.batch(
+                train_config.get("batch_size")
+                ).prefetch(train_config.get("batch_buffer")),
             epochs=train_config.get("max_epochs"),
             ## Number of batches to draw per epoch. Use full dataset by default
             #steps_per_epoch=train_config.get("train_steps_per_epoch"),

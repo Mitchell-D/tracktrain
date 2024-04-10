@@ -63,6 +63,11 @@ any changes.
 
 __ModelDir.py__
 
+`ModelDir` is a class abstracting a directory minimally containing
+a config file sufficient to create a compilable Model object, and
+providing methods for interfacing with the model's configuration,
+training metrics, and trained weights.
+
 __ModelSet.py__
 
 ### building and training models

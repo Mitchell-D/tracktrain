@@ -77,7 +77,7 @@ class KL_Divergence(Layer):
 def variational_encoder_decoder(
         name:str, num_inputs:int, num_outputs:int, num_latent:int,
         enc_node_list, dec_node_list, dropout_rate=0.0, batchnorm=True,
-        enc_dense_kwargs={}, dec_dense_kwargs={}):
+        softmax_out=False, enc_dense_kwargs={}, dec_dense_kwargs={}):
     """
     It's probably better to use the VariationalEncoderDecoder class.
 
@@ -96,6 +96,8 @@ def variational_encoder_decoder(
         all of the encoder feedforward layers.
     :@param dec_dense_kwargs: arguments (like activation function) passed to
         all of the decoder feedforward layers.
+    :@param softmax_out: if True, uses a softmax rather than linear layer as
+        the output, for use in classifiers
     """
     l_input = Input(shape=(num_inputs,), name=f"{name}_input")
     l_enc_dense = get_dense_stack(
@@ -122,7 +124,7 @@ def variational_encoder_decoder(
     l_output = Dense(
             num_outputs,
             name=f"{name}_out",
-            activation="linear"
+            activation=("linear", "softmax")[softmax_out],
             )(l_decoder)
     ved = Model(l_input, l_output)
     ved.add_loss(kl_divergence(z_mean, z_log_var))
@@ -134,7 +136,8 @@ def feedforward_from_config(config:dict):
 
 def feedforward(
         model_name:str, node_list:list, num_inputs:int, num_outputs:int,
-        batchnorm=True, dropout_rate=0.0, dense_kwargs={}, **kwargs):
+        batchnorm=True, dropout_rate=0.0, dense_kwargs={}, softmax_out=False,
+        **kwargs):
     """
     Just a series of dense layers with some optional parameters
 
@@ -145,6 +148,8 @@ def feedforward(
     :@param batchnorm: Normalizes layer activations to gaussian between layers
     :@param dropout_rate: Percentage of nodes randomly disabled during training
     :@param dense_kwargs: Dict of arguments to pass to all Dense layers.
+    :@param softmax_out: if True, uses a softmax rather than linear layer as
+        the output, for use in classifiers
     """
     ff_in = Input(shape=(num_inputs,), name="input")
     dense = get_dense_stack(
@@ -155,7 +160,10 @@ def feedforward(
             batchnorm=batchnorm,
             dense_kwargs=dense_kwargs,
             )
-    output = Dense(units=num_outputs, activation="linear",name="output")(dense)
+    output = Dense(units=num_outputs,
+                   activation=("linear", "softmax")[softmax_out],
+                   name="output"
+                   )(dense)
     model = Model(inputs=ff_in, outputs=output)
     return model
 

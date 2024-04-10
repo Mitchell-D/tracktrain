@@ -14,6 +14,8 @@ compile_arg_descriptions = {
         }
 compile_arg_defaults = {
         "weighted_metrics":None,
+        "input_feats":None,
+        "output_feats":None,
         "loss":"mse"
         }
 
