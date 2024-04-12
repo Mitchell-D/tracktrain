@@ -124,8 +124,10 @@ def variational_encoder_decoder(
     l_output = Dense(
             num_outputs,
             name=f"{name}_out",
-            activation=("linear", "softmax")[softmax_out],
+            activation="linear",
             )(l_decoder)
+    if softmax_out:
+        tf.keras.activations.softmax(l_output)
     ved = Model(l_input, l_output)
     ved.add_loss(kl_divergence(z_mean, z_log_var))
     return ved
@@ -160,10 +162,14 @@ def feedforward(
             batchnorm=batchnorm,
             dense_kwargs=dense_kwargs,
             )
-    output = Dense(units=num_outputs,
-                   activation=("linear", "softmax")[softmax_out],
-                   name="output"
-                   )(dense)
+    output = Dense(
+            units=num_outputs,
+            activation="linear",
+            name="output"
+            )(dense)
+    if softmax_out:
+        output = tf.keras.activations.softmax(output)
+
     model = Model(inputs=ff_in, outputs=output)
     return model
 
