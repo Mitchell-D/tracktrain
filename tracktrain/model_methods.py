@@ -138,8 +138,8 @@ def _apply_psf(args):
     return tf.math.reduce_sum(tf.math.multiply(*args), axis=[1,2])
 
 def get_paed(
-        num_modis_bands:int, num_geom_bands:int,
-        num_latent_bands:int, num_ceres_bands:int,
+        num_modis_feats:int, num_ceres_feats:int,
+        num_latent_feats:int, num_ceres_labels:int,
         enc_conv_filters:list, dec_conv_filters:list,
         enc_activation="gelu", enc_use_bias=True,
         dec_activation="gelu", dec_use_bias=True,
@@ -148,19 +148,15 @@ def get_paed(
         **kwargs):
     """
     Pixel-wise aggregate encoder-decoder for aes690final
-    Inputs:dict
+    Inputs: (dict)
         "modis":(B,M,N,Fm) grid of normalized Fm MODIS radiances
         "geom":(B,M,N,Fg) grid of normalized Fg geometry values
         "psf":(B,M,N,1) grid of PSF magnitudes summing to 1.
     Outputs:
         (B,Fc) normalized Fc CERES fluxes
     """
-    #p_in = Input(shape=(grid_size,grid_size,1), name="in_psf")
-    #m_in = Input(shape=(grid_size,grid_size,num_modis_bands), name="in_modis")
-    m_in = Input(shape=(None,None,num_modis_bands), name="in_modis")
-    g_in = Input(shape=(None,None,num_geom_bands), name="in_geom")
-    #geom_shape = (*tf.shape(m_in)[:3], num_geom_bands)
-    #grid_geom = tf.broadcast_to(g_in, geom_shape, name="resize_geom")
+    m_in = Input(shape=(None,None,num_modis_feats), name="in_modis")
+    g_in = Input(shape=(None,None,num_ceres_feats), name="in_geom")
     p_in = Input(shape=(None,None,1), name="in_psf")
 
     last_layer = m_in
@@ -177,7 +173,7 @@ def get_paed(
         if enc_dropout>0.:
             last_layer = Dropout(enc_dropout, name=f"enc_do_{i}")(last_layer)
     enc_out = Conv2D(
-            filters=num_latent_bands,
+            filters=num_latent_feats,
             kernel_size=1,
             activation="linear",
             name="enc_out",
@@ -198,14 +194,14 @@ def get_paed(
         if dec_dropout>0.:
             last_layer = Dropout(dec_dropout, name=f"dec_do_{i}")(last_layer)
     dec_out = Conv2D(
-            filters=num_ceres_bands,
+            filters=num_ceres_labels,
             kernel_size=1,
             activation="linear",
             name="dec_out",
             **dec_out_kwargs,
             )(last_layer)
     psf_out = Lambda(function=_apply_psf, name="psf")((dec_out, p_in))
-    inputs = {"modis":m_in, "geom":g_in, "psf":p_in}
+    inputs = [m_in, g_in, p_in]
     return Model(inputs=inputs, outputs=[psf_out])
 
 def feedforward_from_config(config:dict):
