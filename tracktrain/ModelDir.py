@@ -180,13 +180,20 @@ class ModelDir:
         The final model weights file is identified by its name:
         {model}_final.weights.hdf5
         """
-        load_path = (model_path, self.path_final_weights)[model is None]
-        assert load_path.exists()
+        #load_path = (model_path, self.path_final_weights)[model is None]
+        #assert load_path.exists()
+        weights_path = Path(weights_path)
         if self.config.get("model_type") not in model_builders.keys():
             raise ValueError(f"model_type = {self.config.get('model_typ')}"
                              f" must be one of {list(model_builders.keys())}")
         model = model_builders.get(self.config.get("model_type"))(self.config)
-        model.load_weights(self.path_final_weights)
+        if weights_path is None:
+            model.load_weights(self.path_final_weights)
+        else:
+            if weights_path.name in (p.name for p in self.dir.iterdir()):
+                model.load_weights(self.dir.joinpath(weights_path.name))
+            else:
+                model.load_weights(weights_path)
         return model
 
     @property
