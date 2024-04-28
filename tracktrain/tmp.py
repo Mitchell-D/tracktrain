@@ -11,21 +11,6 @@ from tensorflow.keras.layers import Conv2D,Lambda,Concatenate
 
 from tracktrain.config import dense_kwargs_default
 
-class SquareRegLayer(Layer):
-    """
-    adds loss proportional to the absolute value of the inputs,
-    scaled by a coefficient L(x) = square_coeff * x**2
-    """
-    def __init__(self, square_coeff=.25):
-        super().__init__()
-        assert square_coeff>0, "Negative loss not allowed"
-        self._square_coeff = square_coeff
-    def call(self, x):
-        reg_loss = tf.math.reduce_mean(.25*x**2)
-        self.add_loss(reg_loss)
-        return x
-
-
 def get_dense_stack(name:str, layer_input:Layer, node_list:list,
         batchnorm=True, dropout_rate=0.0, dense_kwargs={}):
     """
@@ -225,114 +210,6 @@ def get_paed_old(
     inputs = [m_in, g_in, p_in]
     return Model(inputs=inputs, outputs=[psf_out])
 
-def get_paed_old2(
-        num_modis_feats:int, num_ceres_feats:int,
-        num_latent_feats:int, num_ceres_labels:int,
-        enc_conv_filters:list, dec_conv_filters:list,
-        enc_activation="gelu", enc_use_bias=True,
-        dec_activation="gelu", dec_use_bias=True,
-        enc_kwargs={}, enc_out_kwargs={}, enc_dropout=0., enc_batchnorm=True,
-        dec_kwargs={}, dec_out_kwargs={}, dec_dropout=0., dec_batchnorm=True,
-        kernel_size=1, **kwargs):
-    """
-    Pixel-wise aggregate encoder-decoder for aes690final.
-    This model is essentially the same as get_paed, but is less expressive.
-    It's just sticking around for now so I can generate figures for test-7
-
-    Inputs: (dict)
-        "modis":(B,M,N,Fm) grid of normalized Fm MODIS radiances
-        "geom":(B,M,N,Fg) grid of normalized Fg geometry values
-        "psf":(B,M,N,1) grid of PSF magnitudes summing to 1.
-    Outputs:
-        (B,Fc) normalized Fc CERES fluxes
-    """
-    m_in = Input(shape=(None,None,num_modis_feats), name="in_modis")
-    g_in = Input(shape=(None,None,num_ceres_feats), name="in_geom")
-    p_in = Input(shape=(None,None,1), name="in_psf")
-    inputs = [m_in, g_in, p_in]
-
-    def _get_encoder(enc_in):
-        last_layer = enc_in
-        for i,n in enumerate(enc_conv_filters):
-            last_layer = Conv2D(
-                    filters=n,
-                    kernel_size=kernel_size,
-                    activation=enc_activation,
-                    use_bias=enc_use_bias,
-                    padding="same", ## Always pad to same size even big kernels
-                    name=f"enc_conv_{i}",
-                    )(last_layer)
-            if enc_batchnorm:
-                last_layer = BatchNormalization(
-                        name=f"enc_bn_{i}"
-                        )(last_layer)
-            if enc_dropout>0.:
-                last_layer = Dropout(
-                        enc_dropout,
-                        name=f"enc_do_{i}"
-                        )(last_layer)
-        enc_out = Conv2D(
-                filters=num_latent_feats,
-                kernel_size=1,
-                activation="linear",
-                name="enc_out",
-                **enc_out_kwargs,
-                )(last_layer)
-        return enc_out
-
-    def _get_decoder(latent, geom, dec_str):
-        #last_layer = tf.concat([latent,geom], -1)
-        last_layer = Concatenate(
-                axis=-1,
-                name=f"concat_geom_{dec_str}",
-                )([latent, geom])
-        for i,n in enumerate(dec_conv_filters):
-            last_layer = Conv2D(
-                    filters=n,
-                    kernel_size=kernel_size,
-                    activation=dec_activation,
-                    use_bias=dec_use_bias,
-                    padding="same", ## Always pad to same size even big kernels
-                    name=f"dec_conv_{dec_str}_{i}",
-                    )(last_layer)
-            if dec_batchnorm:
-                last_layer = BatchNormalization(
-                        name=f"dec_bn_{dec_str}_{i}"
-                        )(last_layer)
-            if dec_dropout>0.:
-                last_layer = Dropout(
-                        dec_dropout,
-                        name=f"dec_do_{dec_str}_{i}"
-                        )(last_layer)
-        dec_out = Conv2D(
-                filters=num_ceres_labels,
-                kernel_size=1,
-                activation="linear",
-                name=f"dec_out_{dec_str}",
-                **dec_out_kwargs,
-                )(last_layer)
-        return dec_out
-
-    ## functional layer to apply the PSF to a (B,W,W,F) grid
-    apply_psf = Lambda(function=_apply_psf, name="psf")
-
-    ## encode the MODIS data to the latent grid
-    enc_out = _get_encoder(m_in)
-
-    ## decode the latent grid to a prediction, then aggregate it to a vector
-    enc_dec = _get_decoder(enc_out, g_in, dec_str="dec-agg")
-    enc_dec_agg = apply_psf((enc_dec, p_in))
-
-    ## aggregate the latent grid to a vector, then decode it to a prediction
-    enc_agg = apply_psf((enc_out, p_in))[:,tf.newaxis,tf.newaxis,:]
-    g_agg = tf.math.reduce_mean(g_in, axis=(1,2), keepdims=True)
-    enc_agg_dec = _get_decoder(enc_agg, g_agg, dec_str="agg-dec")
-
-    ## average the outputs from the two different pathways
-    flux = (enc_dec_agg + enc_agg_dec)/2
-
-    return Model(inputs=inputs, outputs=[flux])
-
 def get_paed(
         num_modis_feats:int, num_ceres_feats:int,
         num_latent_feats:int, num_ceres_labels:int,
@@ -341,8 +218,7 @@ def get_paed(
         dec_activation="gelu", dec_use_bias=True,
         enc_kwargs={}, enc_out_kwargs={}, enc_dropout=0., enc_batchnorm=True,
         dec_kwargs={}, dec_out_kwargs={}, dec_dropout=0., dec_batchnorm=True,
-        square_regularization_coeff=None, share_decoder_weights=True,
-        kernel_size=1, **kwargs):
+        share_decoder_weights=True, kernel_size=1, **kwargs):
     """
     Pixel-wise aggregate encoder-decoder for aes690final.
 
@@ -426,7 +302,7 @@ def get_paed(
         return dec_out
     #'''
 
-    def _get_model_decoder():
+    def _get_func_decoder():
         """ Returns functional decoder (layers not applied; weights shared)"""
         dec_latent_in = Input(
                 shape=(None,None,num_latent_feats),
@@ -471,32 +347,25 @@ def get_paed(
     apply_psf = Lambda(function=_apply_psf, name="psf")
 
     ## encode the MODIS data to the latent grid
-    latent_grid = _get_encoder(m_in)
+    enc_out = _get_encoder(m_in)
 
 
     ## decode the latent grid to a prediction, then aggregate it to a vector
     if share_decoder_weights:
-        decoder = _get_model_decoder()
-        enc_dec = decoder([latent_grid, g_in])
+        decoder = _get_func_decoder()
+        enc_dec = decoder([enc_out, g_in])
     else:
-        enc_dec = _get_new_decoder(latent_grid, g_in, dec_str="dec-agg")
-
-    ## Optionally regularize un-aggregated outputs by their magnitude to
-    ## dissuade the model from over-representing individual pixel contributions
-    if not square_regularization_coeff is None:
-        weight_reg = SquareRegLayer(square_regularization_coeff)
-        enc_dec = weight_reg(enc_dec)
-
+        enc_dec = _get_new_decoder(enc_out, g_in, dec_str="dec-agg")
     enc_dec_agg = apply_psf((enc_dec, p_in))
 
     ## aggregate the latent grid to a vector, then decode it to a prediction
-    latent_agg = apply_psf((latent_grid, p_in))[:,tf.newaxis,tf.newaxis,:]
-    ## average the geometry (which should be constant during training)
-    geom_agg = tf.math.reduce_mean(g_in, axis=(1,2), keepdims=True)
+    enc_agg = apply_psf((enc_out, p_in))[:,tf.newaxis,tf.newaxis,:]
+    g_agg = tf.math.reduce_mean(g_in, axis=(1,2), keepdims=True)
     if share_decoder_weights:
-        enc_agg_dec = decoder([latent_agg, geom_agg])
+        enc_agg_dec = decoder([enc_agg, g_agg])
     else:
-        enc_agg_dec = _get_new_decoder(latent_agg, geom_agg, dec_str="agg-dec")
+        enc_agg_dec = _get_new_decoder(enc_agg, g_agg, dec_str="agg-dec")
+
 
     ## average the outputs from the two different pathways
     flux = (enc_dec_agg + enc_agg_dec)/2

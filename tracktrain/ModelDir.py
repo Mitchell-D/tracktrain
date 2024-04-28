@@ -34,6 +34,8 @@ dictionary as a positional parameter and produce a valid Model object.
 model_builders = {
         "ved":VariationalEncoderDecoder.from_config,
         "ff":mm.feedforward_from_config,
+        "paed_old":lambda c:mm.get_paed_old(**c),
+        "paed_old2":lambda c:mm.get_paed_old2(**c),
         "paed":lambda c:mm.get_paed(**c),
         }
 

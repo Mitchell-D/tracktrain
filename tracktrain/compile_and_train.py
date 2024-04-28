@@ -160,7 +160,8 @@ def compile_and_build_dir(
     summary_path = model_dir_path.joinpath(
             compile_config.get("model_name")+"_summary.txt")
     with summary_path.open("w") as f:
-        model.summary(print_fn=lambda x: f.write(x + '\n'))
+        model.summary(expand_nested=True,
+                      print_fn=lambda x: f.write(x + '\n'))
 
     ## Return the compiled model
     return model,model_dir_path
