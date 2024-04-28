@@ -342,7 +342,7 @@ def get_paed(
         enc_kwargs={}, enc_out_kwargs={}, enc_dropout=0., enc_batchnorm=True,
         dec_kwargs={}, dec_out_kwargs={}, dec_dropout=0., dec_batchnorm=True,
         square_regularization_coeff=None, share_decoder_weights=True,
-        kernel_size=1, **kwargs):
+        kernel_size=1, separate_output_decoders=False, **kwargs):
     """
     Pixel-wise aggregate encoder-decoder for aes690final.
 
@@ -352,6 +352,16 @@ def get_paed(
         "psf":(B,M,N,1) grid of PSF magnitudes summing to 1.
     Outputs:
         (B,Fc) normalized Fc CERES fluxes
+
+    :@param square_regularization_coeff:If float instead of None, the
+        predictions are regularized by penalizing distance from 0. This is
+        done by squaring the outputs, then multiplying by this coefficient.
+    :@param share_decoder_weights: If True, the same weights will be used to
+        decode the aggregate latent vector and the full pixel-wise grid.
+        Otherwise, each pathway will get its own decoder.
+    :@param separate_output_decoders: If True, each output (num_ceres_labels)
+        will be decoded by separate weights. If share_decoder_weights is also
+        True, each prediction will be made using 2 separate decoders.
     """
     m_in = Input(shape=(None,None,num_modis_feats), name="in_modis")
     g_in = Input(shape=(None,None,num_ceres_feats), name="in_geom")
@@ -388,10 +398,16 @@ def get_paed(
         return enc_out
 
     #'''
-    def _get_new_decoder(latent, geom, dec_str):
+    def _get_new_decoder(latent, geom, dec_str, output_count=None):
         """
         Returns new decoder declaration with the provided inputs.
         Using this method creates a new set of weights.
+
+        :@param latent: (B,W,W,L) latent grid
+        :@param geom: (B,W,W,G) grid of CERES features
+        :@param dec_str: identifying string for this decoder
+        :@param output_count: Number of elements in the output.
+            If None, defaults to num_ceres_labels
         """
         #last_layer = tf.concat([latent,geom], -1)
         last_layer = Concatenate(
@@ -416,8 +432,9 @@ def get_paed(
                         dec_dropout,
                         name=f"dec_do_{dec_str}_{i}"
                         )(last_layer)
+        num_out = num_ceres_labels if output_count is None else output_count
         dec_out = Conv2D(
-                filters=num_ceres_labels,
+                filters=num_out,
                 kernel_size=1,
                 activation="linear",
                 name=f"dec_out_{dec_str}",
@@ -426,8 +443,14 @@ def get_paed(
         return dec_out
     #'''
 
-    def _get_model_decoder():
-        """ Returns functional decoder (layers not applied; weights shared)"""
+    def _get_model_decoder(dec_str, output_count=None):
+        """
+        Returns functional decoder (layers not applied; weights shared)
+
+        :@param dec_str: identifying string for this decoder
+        :@param output_count: Number of elements in the output.
+            If None, defaults to num_ceres_labels
+        """
         dec_latent_in = Input(
                 shape=(None,None,num_latent_feats),
                 name="dec_in_latent")
@@ -456,15 +479,16 @@ def get_paed(
                         dec_dropout,
                         name=f"dec_do_{i}"
                         )(last_layer)
+        num_out = num_ceres_labels if output_count is None else output_count
         dec_out = Conv2D(
-                filters=num_ceres_labels,
+                filters=num_out,
                 kernel_size=1,
                 activation="linear",
-                name=f"dec_out",
+                name=f"dec_out_{dec_str}",
                 **dec_out_kwargs,
                 )(last_layer)
         dec = Model(inputs=[dec_latent_in,dec_geom_in],
-                    outputs=dec_out)
+                    outputs=dec_out, name=f"dec_{dec_str}")
         return dec
 
     ## functional layer to apply the PSF to a (B,W,W,F) grid
@@ -474,29 +498,80 @@ def get_paed(
     latent_grid = _get_encoder(m_in)
 
 
-    ## decode the latent grid to a prediction, then aggregate it to a vector
-    if share_decoder_weights:
-        decoder = _get_model_decoder()
-        enc_dec = decoder([latent_grid, g_in])
+    if separate_output_decoders:
+        """ Separate output decoders - full latent grid decoding  """
+        if share_decoder_weights:
+            ## declare a shared latent grid decoder for each output
+            decoders = [_get_model_decoder(f"dec-agg-{i}", output_count=1)
+                        for i in range(num_ceres_labels)]
+            enc_dec = [d([latent_grid, g_in]) for d in decoders]
+        else:
+            ## declare separate latent grid decoders for each output
+            enc_dec = [
+                    _get_new_decoder(
+                        latent_grid, g_in, dec_str=f"dec-agg-{i}",
+                        output_count=1,)
+                    for i in range(num_ceres_labels)
+                    ]
+        ## Optionally regularize un-aggregated outputs by their magnitude to
+        ## dissuade the model from over-representing individual pixels
+        if not square_regularization_coeff is None:
+            weight_reg = SquareRegLayer(square_regularization_coeff)
+            enc_dec = [weight_reg(d) for d in enc_dec]
+        ## Apply the point spread function to the decoded latent grid
+        enc_dec_agg = [apply_psf((d, p_in)) for d in enc_dec]
+        enc_dec_agg = Concatenate(axis=-1, name="join_dec-agg")(enc_dec_agg)
+
+        """ Separate output decoders - aggregate latent vector decoding  """
+        ## aggregate the latent grid to a vector, then decode to a prediction
+        latent_agg = apply_psf((latent_grid, p_in))[:,tf.newaxis,tf.newaxis,:]
+        ## average the geometry (which should be constant during training)
+        geom_agg = tf.math.reduce_mean(g_in, axis=(1,2), keepdims=True)
+        if share_decoder_weights:
+            enc_agg_dec = [d([latent_agg, geom_agg])
+                           for d in decoders]
+        else:
+            ## Declare a new aggregated latent vector decoder for each output
+            enc_agg_dec = [
+                    _get_new_decoder(
+                        latent_agg, geom_agg, dec_str=f"agg-dec-{i}",
+                        output_count=1,)
+                    for i in range(num_ceres_labels)
+                    ]
+        enc_agg_dec = Concatenate(axis=-1, name="join_agg-dec")(enc_agg_dec)
     else:
-        enc_dec = _get_new_decoder(latent_grid, g_in, dec_str="dec-agg")
+        """ Single output decoder - full latent grid decoding  """
+        ## decode the latent grid to a prediction, then aggregate to a vector
+        if share_decoder_weights:
+            decoder = _get_model_decoder("dec-agg")
+            enc_dec = decoder([latent_grid, g_in])
+        else:
+            enc_dec = _get_new_decoder(latent_grid, g_in, dec_str="dec-agg")
 
-    ## Optionally regularize un-aggregated outputs by their magnitude to
-    ## dissuade the model from over-representing individual pixel contributions
-    if not square_regularization_coeff is None:
-        weight_reg = SquareRegLayer(square_regularization_coeff)
-        enc_dec = weight_reg(enc_dec)
+        ## Optionally regularize un-aggregated outputs by their magnitude to
+        ## dissuade the model from over-representing individual pixels
+        if not square_regularization_coeff is None:
+            weight_reg = SquareRegLayer(square_regularization_coeff)
+            enc_dec = weight_reg(enc_dec)
 
-    enc_dec_agg = apply_psf((enc_dec, p_in))
+        enc_dec_agg = apply_psf((enc_dec, p_in))
 
-    ## aggregate the latent grid to a vector, then decode it to a prediction
-    latent_agg = apply_psf((latent_grid, p_in))[:,tf.newaxis,tf.newaxis,:]
-    ## average the geometry (which should be constant during training)
-    geom_agg = tf.math.reduce_mean(g_in, axis=(1,2), keepdims=True)
-    if share_decoder_weights:
-        enc_agg_dec = decoder([latent_agg, geom_agg])
-    else:
-        enc_agg_dec = _get_new_decoder(latent_agg, geom_agg, dec_str="agg-dec")
+        """ Single output decoder - aggregate latent vector decoding  """
+        ## aggregate the latent grid to a vector, then decode it to a prediction
+        latent_agg = apply_psf((latent_grid, p_in))[:,tf.newaxis,tf.newaxis,:]
+        ## average the geometry (which should be constant during training)
+        geom_agg = tf.math.reduce_mean(g_in, axis=(1,2), keepdims=True)
+        print()
+        print(enc_dec_agg.shape)
+        print()
+        if share_decoder_weights:
+            enc_agg_dec = decoder([latent_agg, geom_agg])
+        else:
+            enc_agg_dec = _get_new_decoder(
+                    latent_agg,
+                    geom_agg,
+                    dec_str="agg-dec"
+                    )
 
     ## average the outputs from the two different pathways
     flux = (enc_dec_agg + enc_agg_dec)/2
