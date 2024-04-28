@@ -16,8 +16,8 @@ class SquareRegLayer(Layer):
     adds loss proportional to the absolute value of the inputs,
     scaled by a coefficient L(x) = square_coeff * x**2
     """
-    def __init__(self, square_coeff=.25):
-        super().__init__()
+    def __init__(self, square_coeff=.25, **kwargs):
+        super().__init__(**kwargs)
         assert square_coeff>0, "Negative loss not allowed"
         self._square_coeff = square_coeff
     def call(self, x):
@@ -152,7 +152,6 @@ def _apply_psf(args):
     """ Apply the psf (which should sum to 1) along the 2nd and 3rd axes """
     return tf.math.reduce_sum(tf.math.multiply(*args), axis=[1,2])
 
-#def get_paed(
 def get_ceda(
         num_modis_feats:int, num_ceres_feats:int,
         num_latent_feats:int, num_ceres_labels:int,
@@ -337,11 +336,12 @@ def get_ceda(
         ## Optionally regularize un-aggregated outputs by their magnitude to
         ## dissuade the model from over-representing individual pixels
         if not square_regularization_coeff is None:
-            weight_reg = SquareRegLayer(square_regularization_coeff)
+            weight_reg = SquareRegLayer(square_regularization_coeff,
+                                        name="square_reg")
             enc_dec = [weight_reg(d) for d in enc_dec]
+        enc_dec = Concatenate(axis=-1, name="join_dec-agg")(enc_dec)
         ## Apply the point spread function to the decoded latent grid
-        enc_dec_agg = [apply_psf((d, p_in)) for d in enc_dec]
-        enc_dec_agg = Concatenate(axis=-1, name="join_dec-agg")(enc_dec_agg)
+        enc_dec_agg = apply_psf((enc_dec, p_in))
 
         """ Separate output decoders - aggregate latent vector decoding  """
         ## aggregate the latent grid to a vector, then decode to a prediction
@@ -372,7 +372,8 @@ def get_ceda(
         ## Optionally regularize un-aggregated outputs by their magnitude to
         ## dissuade the model from over-representing individual pixels
         if not square_regularization_coeff is None:
-            weight_reg = SquareRegLayer(square_regularization_coeff)
+            weight_reg = SquareRegLayer(square_regularization_coeff,
+                                        name="square_reg")
             enc_dec = weight_reg(enc_dec)
 
         enc_dec_agg = apply_psf((enc_dec, p_in))
