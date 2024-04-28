@@ -21,6 +21,7 @@ import tensorflow as tf
 
 from tracktrain import utils
 import tracktrain.model_methods as mm
+import tracktrain.old_methods as om
 from tracktrain.compile_and_train import compile_and_build_dir, train
 from tracktrain.VariationalEncoderDecoder import VariationalEncoderDecoder
 from tracktrain.config import compile_valid_args, compile_arg_descriptions
@@ -34,9 +35,10 @@ dictionary as a positional parameter and produce a valid Model object.
 model_builders = {
         "ved":VariationalEncoderDecoder.from_config,
         "ff":mm.feedforward_from_config,
-        "paed_old":lambda c:mm.get_paed_old(**c),
-        "paed_old2":lambda c:mm.get_paed_old2(**c),
-        "paed":lambda c:mm.get_paed(**c),
+        "paed_old":lambda c:om.get_paed_old(**c),
+        "paed_old2":lambda c:om.get_paed_old2(**c),
+        "paed":lambda c:om.get_paed(**c),
+        "ceda":lambda c:mm.get_ceda(**c),
         }
 
 class ModelDir:
