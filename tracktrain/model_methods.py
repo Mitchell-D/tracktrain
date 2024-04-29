@@ -383,9 +383,6 @@ def get_ceda(
         latent_agg = apply_psf((latent_grid, p_in))[:,tf.newaxis,tf.newaxis,:]
         ## average the geometry (which should be constant during training)
         geom_agg = tf.math.reduce_mean(g_in, axis=(1,2), keepdims=True)
-        print()
-        print(enc_dec_agg.shape)
-        print()
         if share_decoder_weights:
             enc_agg_dec = decoder([latent_agg, geom_agg])
         else:
@@ -394,9 +391,8 @@ def get_ceda(
                     geom_agg,
                     dec_str="agg-dec"
                     )
-
     ## average the outputs from the two different pathways
-    flux = (enc_dec_agg + enc_agg_dec)/2
+    flux = (enc_dec_agg + tf.squeeze(enc_agg_dec))/2
 
     return Model(inputs=inputs, outputs=[flux])
 

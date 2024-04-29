@@ -118,9 +118,9 @@ class ModelDir:
         self.path_prog = self.dir.joinpath(f"{self.name}_prog.csv")
         ## final model should be stored as either weights or a serialized Model
         self.path_final_weights = self.dir.joinpath(
-                f"{self.name}_final.weights.hdf5")
+                f"{self.name}_final.weights.h5")
         self.path_final_model = self.dir.joinpath(
-                f"{self.name}_final.hdf5")
+                f"{self.name}_final.h5")
         self._check_req_files()
         self._prog = None
         self._summary = None
@@ -186,12 +186,17 @@ class ModelDir:
         """
         #load_path = (model_path, self.path_final_weights)[model is None]
         #assert load_path.exists()
-        weights_path = Path(weights_path)
+        if not weights_path is None:
+            weights_path = Path(weights_path)
         if self.config.get("model_type") not in model_builders.keys():
             raise ValueError(f"model_type = {self.config.get('model_typ')}"
                              f" must be one of {list(model_builders.keys())}")
         model = model_builders.get(self.config.get("model_type"))(self.config)
         if weights_path is None:
+            print(self.path_final_weights)
+            if not self.path_final_weights.exists():
+                raise ValueError(
+                        f"No final weights found in {self.dir.as_posix()}")
             model.load_weights(self.path_final_weights)
         else:
             if weights_path.name in (p.name for p in self.dir.iterdir()):
