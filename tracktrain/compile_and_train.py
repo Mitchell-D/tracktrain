@@ -268,6 +268,8 @@ def train(model_dir_path, train_config:dict, compiled_model:Model,
             ## Number of epochs to wait between validation runs.
             validation_freq=train_config.get("val_frequency"),
             callbacks=callbacks,
+            steps_per_epoch=train_config.get("steps_per_epoch"),
+            validation_steps=train_config.get("validation_steps"),
             verbose=2,
             )
 
