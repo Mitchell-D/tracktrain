@@ -18,6 +18,7 @@ from pathlib import Path
 from itertools import chain
 from collections.abc import Callable
 import tensorflow as tf
+import matplotlib.pyplot as plt
 
 from tracktrain import utils
 import tracktrain.model_methods as mm
@@ -234,7 +235,7 @@ class ModelDir:
         :@param metric: String metric label or list of metrics
         """
         if type(metric) is str:
-            assert metric in self.metrics
+            assert metric in self.metric_labels
             return self.metric_data[:,self.metric_labels.index(metric)]
         assert all(m in self.metric_labels for m in metric)
         idxs = np.array([self.metric_labels.index(m) for m in metric])
@@ -358,15 +359,44 @@ class ModelSet:
             subset = tuple(filter(lambda m:substr in m.name, subset))
         return ModelSet(subset, check_valid=check_valid)
 
-    def plot_metrics(self, metrics:list):
-        """ """
+    def plot_metrics(self,metrics:list,fig_path=None,show=False,plot_spec={}):
+        """  """
+        ps = {"xlabel":"epoch", "ylabel":"", "title":"", "cmap":"Set1",
+              "text_size":12, "norm":"linear", "logx":False, "figsize":(16,12),
+              "plot_kwargs":{}, "xlim":None, "ylim":None, "line_width":2,
+              "facecolor":"white", "legend_cols":1,}
+        line_styles = ("-", ":", "--", "-.")
+        ps = {**ps, **plot_spec}
         fig,ax = plt.subplots()
-        for md in self.model_dirs:
-            for m in metrics:
+        cmap = plt.cm.get_cmap(ps.get("cmap"), len(self.model_dirs))
+        for i,md in enumerate(sorted(self.model_dirs,key=lambda m:m.dir.name)):
+            for j,m in enumerate(metrics):
                 if m not in md.metric_labels:
                     raise ValueError(f"{md} doesn't support metric {m}")
-                ax.plot(md.get_metric("epoch"),md.get_metric(m),label=md.name)
-        plt.show()
+                ax.plot(md.get_metric("epoch"),
+                        md.get_metric(m),
+                        linewidth=ps.get("line_width"),
+                        label=f"{md.name} - {m}",
+                        color=cmap(i),
+                        linestyle=line_styles[j%len(line_styles)],
+                        **ps.get("plot_kwargs"),
+                        )
+        ax.legend(ncols=ps.get("legend_cols"))
+        if ps["logx"]:
+            plt.semilogx()
+        ax.set_title(ps.get("title"))
+        ax.set_xlabel(ps.get("xlabel"))
+        ax.set_ylabel(ps.get("ylabel"))
+        ax.set_facecolor(ps.get("facecolor"))
+        if not ps.get("xlim") is None:
+            ax.set_xlim(*ps["xlim"])
+        if not ps.get("ylim") is None:
+            ax.set_ylim(*ps["ylim"])
+        if show:
+            plt.show()
+        if not fig_path is None:
+            fig.set_size_inches(*ps.get("figsize"))
+            fig.savefig(fig_path.as_posix(), bbox_inches="tight",dpi=80)
 
 
 if __name__=="__main__":
