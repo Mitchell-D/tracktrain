@@ -34,6 +34,7 @@ def get_dense_stack(name:str, layer_input:Layer, node_list:list,
     dense_kwargs = {**dense_kwargs_default.copy(), **dense_kwargs}
     l_prev = layer_input
     for i in range(len(node_list)):
+        print(node_list[i])
         l_new = Dense(
                 units=node_list[i],
                 **dense_kwargs,
