@@ -3,24 +3,26 @@
 """ --( Configuration for compile_and_train.py )-- """
 
 compile_valid_args = (
-        "model_name", "learning_rate", "metrics", "loss", "weighted_metrics",
-        "input_feats", "output_feats",
+        "learning_rate", "metrics", "loss", #"weighted_metrics",
+        #"input_feats", "output_feats",
         )
 compile_arg_descriptions = {
         "learning_rate":"Learning rate ceiling for Adam optimizer",
         "metrics":"List of Metric objects or metric names to track ",
-        "weighted_metrics":"Metrics to scale by generated sample weights",
+        ## use third argument in custom loss function instead
+        #"weighted_metrics":"Metrics to scale by generated sample weights",
         "loss":"loss function to use for training"
         }
 compile_arg_defaults = {
-        "weighted_metrics":None,
-        "input_feats":None,
-        "output_feats":None,
-        "loss":"mse"
+        ## use third argument in custom loss function instead
+        #"weighted_metrics":None,
+        #"input_feats":None,
+        #"output_feats":None,
+        "loss":"mse",
         }
 
 train_valid_args = (
-        "model_name", "early_stop_metric", "early_stop_patience",
+        "early_stop_metric", "early_stop_patience",
         "save_weights_only", "batch_size", "batch_buffer", "max_epochs",
         "val_frequency", "callbacks",
         )
@@ -50,7 +52,7 @@ train_arg_descriptions = {
 train_arg_defaults = {
         "callbacks":["early_stop","model_checkpoint","csv_logger"],
         "early_stop_metric":"val_loss",
-        "early_stop_patience":20,
+        "early_stop_patience":10,
         "save_weights_only":False,
         "batch_size":32,
         "batch_buffer":3,

@@ -34,11 +34,11 @@ Dict mapping string model abbreviations to methods that take a configuration
 dictionary as a positional parameter and produce a valid Model object.
 """
 model_builders = {
-        "ved":VariationalEncoderDecoder.from_config,
-        "ff":mm.feedforward_from_config,
-        "paed_old":lambda c:om.get_paed_old(**c),
-        "paed_old2":lambda c:om.get_paed_old2(**c),
-        "paed":lambda c:om.get_paed(**c),
+        #"ved":VariationalEncoderDecoder.from_config,
+        #"ff":mm.feedforward_from_config,
+        #"paed_old":lambda c:om.get_paed_old(**c),
+        #"paed_old2":lambda c:om.get_paed_old2(**c),
+        #"paed":lambda c:om.get_paed(**c),
         "ceda":lambda c:mm.get_ceda(**c),
         }
 
@@ -70,7 +70,8 @@ class ModelDir:
     |  |- model-2_final.weights.hdf5
     """
     @staticmethod
-    def build_from_config(config, model_parent_dir:Path, print_summary=True):
+    def build_from_config(config, model_parent_dir:Path, print_summary=True,
+            custom_model_builders={}, custom_losses={}, custom_metrics={}):
         """
         Initialize a model according to the configured model_type, which must
         be one of the keys in tracktrain.ModelDir.model_builders.
@@ -86,18 +87,28 @@ class ModelDir:
 
         :@param config: dict containing model_type, and all the keys needed
             to initialize
+        :@param custom_losses: Dictionary of valid custom loss functions
+        :@param custom_metrics: Dictionary of valid custom metric functions
+
+        :@return: 2-tuple (model,md) where 'model' is a compiled Model instance
+            and md is a ModelDir object associated with an existing directory
+            for the associated model object.
         """
         model_type = config.get("model_type")
-        if model_type is None or model_builders.get(model_type) is None:
+        tmp_model_builders = {**model_builders, **custom_model_builders}
+        if model_type is None or tmp_model_builders.get(model_type) is None:
             raise ValueError(
                     f"When initializing a ModelDir, config must "
-                    "provide model_type in ", list(model_builders.keys())
+                    "provide model_type in ", list(tmp_model_builders.keys())
                     )
-        model = model_builders[model_type](config)
+        model = tmp_model_builders[model_type](config.get("model"))
         model,model_dir_path = compile_and_build_dir(
                 model=model,
                 model_parent_dir=model_parent_dir,
-                compile_config=config,
+                config=config,
+                custom_losses=custom_losses,
+                custom_metrics=custom_metrics,
+                print_summary=print_summary,
                 )
         md = ModelDir(model_dir_path)
         md._check_req_files()

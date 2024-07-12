@@ -79,25 +79,24 @@ gpus = tf.config.experimental.list_physical_devices('GPU')
 if len(gpus):
     tf.config.experimental.set_memory_growth(gpus[0], True)
 '''
-def compile_from_config(model, compile_config:dict):
+def compile_from_config(model, compile_config:dict,
+        custom_losses:dict={}, custom_metrics:dict={}):
     """
-    Verify that the required keys are present, then compile the model.
+    Given an initialized Model object, Verify that the keys required to specify
+    a loss function and any metrics are present and map to valid options, then
+    compile the model.
 
     --( required configuration arguments )--
 
-    "model_name":
-        unique string name for this model. This value determines the
-        name of the model directory, and the string prepended to file names.
     "learning_rate":
         float learning rate of the model
     "loss":
         String representing the loss function to use per keras labels
     "metrics":
         List of strings representing metrics to record per keras labels
-    "weighted_metrics":
-        List of metric labels to  be weighted by masking level
 
-
+    :@param custom_losses: Dictionary of valid custom loss functions
+    :@param custom_metrics: Dictionary of valid custom metric functions
     """
     compile_config = {**compile_arg_defaults, **compile_config}
     validate_keys(
@@ -107,19 +106,38 @@ def compile_from_config(model, compile_config:dict):
             descriptions=compile_arg_descriptions,
             )
 
-    ## Compile the model
+    ## Deserialize string args  for built-in or custom metric and loss funcs.
+    metrics = []
+    for m in compile_config.get("metrics"):
+        tmp_metric = tf.keras.metrics.deserialize(
+                m, custom_objects=custom_metrics,)
+        if type(tmp_metric) == str:
+            raise ValueError(f"{m} is not a valid metric argument")
+        metrics.append(tmp_metric)
+
+    loss_fn = tf.keras.losses.deserialize(
+            compile_config.get("loss"),
+            custom_objects=custom_losses,
+            )
+    if type(loss_fn) is str:
+        raise ValueError(f"{loss_fn} is not a valid loss function argument")
+
+    ## Compile the model according to the provided args. assume Adam for
+    ## optimizer, though may want to look into sequence optimization later
     model.compile(
             optimizer=tf.keras.optimizers.Adam(
                 learning_rate=compile_config.get("learning_rate")),
-            metrics=compile_config.get("metrics"),
-            loss=compile_config.get("loss"),
-            weighted_metrics=compile_config.get("weighted_metrics"),
+            metrics=metrics,
+            loss=loss_fn,
+            ## weighted metrics no longer supported; use the third argument
+            ## in a custom loss function to apply weights.
+            #weighted_metrics=compile_config.get("weighted_metrics"),
             )
     return model
 
-
 def compile_and_build_dir(
-        model, model_parent_dir:Path, compile_config:dict, print_summary=True):
+        model, model_parent_dir:Path, config:dict,
+        custom_losses={}, custom_metrics={}, print_summary=True):
     """
     Run the model build pipeline, which compiles a Model object that has
     already been initialized, and creates a ModelDir - style directory with
@@ -130,35 +148,49 @@ def compile_and_build_dir(
     (3) Create a new model directory with the model's configured "model_name"
     (4) Write a _summary.txt and _config.json file to the model directory
 
+    --( mandatory config elements for this method )--
 
-     --( defaults )--
-
-    "weighted_metrics":None
-    "loss":"mse"
+    {
+    "model_name":str
+    "compile":{
+        "learning_rate":float,
+        "loss":str,
+        "metrics":list,
+        }
+    }
 
     :@param model: Initialized Model object that hasn't yet been compiled.
-    :@param compile_config: Configuration dictionary defining the above terms.
+    :@param config: Configuration dictionary defining the above terms.
     :@param model_parent_dir: Parent directory where this model's dir will be
+    :@param custom_losses: Dictionary of valid custom loss functions
+    :@param custom_metrics: Dictionary of valid custom metric functions
 
     :@return: 2-tuple (model, model_dir_path)
     """
-    model = compile_from_config(model, compile_config)
+    compile_config = config.get("compile")
+    if compile_config is None:
+        raise ValueError(f"Provided configuration dict must have a " + \
+                "sub-dict 'compile' with the documented default elements")
+    model = compile_from_config(model, compile_config,
+            custom_losses=custom_losses, custom_metrics=custom_metrics)
     ## Once we know that the model can compile, create and add some
     ## information to the dedicated model directory
-    model_dir_path = model_parent_dir.joinpath(
-            compile_config.get("model_name"))
-    assert not model_dir_path.exists()
+    model_name = config.get("model_name")
+    if model_name is None:
+        raise ValueError(f"Must define model_name in config dict")
+    model_dir_path = model_parent_dir.joinpath(model_name)
+    assert not model_dir_path.exists(), model_dir_path
     model_dir_path.mkdir()
     model_json_path = model_dir_path.joinpath(
-            f"{compile_config.get('model_name')}_config.json")
-    model_json_path.open("w").write(json.dumps(compile_config,indent=4))
+            f"{config.get('model_name')}_config.json")
+    model_json_path.open("w").write(json.dumps(config,indent=4))
 
     ## Write a summary of the model to a file
     if print_summary:
         ## Write a model summary to stdout and to a file
         model.summary(expand_nested=True)
     summary_path = model_dir_path.joinpath(
-            compile_config.get("model_name")+"_summary.txt")
+            config.get("model_name")+"_summary.txt")
     with summary_path.open("w") as f:
         model.summary(expand_nested=True,
                       print_fn=lambda x: f.write(x + '\n'))
@@ -211,7 +243,8 @@ def train(model_dir_path, train_config:dict, compiled_model:Model,
     :@pram gen_validation: tf.data.Dataset (only tested using from_generator)
     """
     assert model_dir_path.exists()
-    assert model_dir_path.name == train_config.get("model_name")
+    #assert model_dir_path.name == train_config.get("model_name")
+    model_name = model_dir_path.name
     ## train_config has order precedence in the dict re-composition
     train_config = {**train_arg_defaults, **train_config}
     ## Make sure the mandatory keys (or defaults) are in the dictionary
@@ -225,14 +258,12 @@ def train(model_dir_path, train_config:dict, compiled_model:Model,
     halt_metric = train_config.get("early_stop_metric")
     if train_config.get("save_weights_only"):
         out_path = model_dir_path.joinpath(
-                train_config.get('model_name') + \
-                        "_{epoch:03}_{val_loss:.3f}.weights.h5"
-                        )
+                model_name + "_{epoch:03}_{val_loss:.3f}.weights.h5")
     else:
         out_path = model_dir_path.joinpath(
-                train_config.get("model_name") + \
-                        "_{epoch:03}_{val_loss:.03f}.h5",
-                        )
+                model_name + "_{epoch:03}_{val_loss:.03f}.h5")
+
+    ## Mandatory callbacks for ModelDir system
     callbacks = {
             "early_stop":tf.keras.callbacks.EarlyStopping(
                 monitor=halt_metric,
@@ -246,7 +277,7 @@ def train(model_dir_path, train_config:dict, compiled_model:Model,
                 ),
             "csv_logger":tf.keras.callbacks.CSVLogger(
                 model_dir_path.joinpath(
-                    f"{train_config.get('model_name')}_prog.csv"),
+                    f"{model_name}_prog.csv"),
                 )
             }
     for c in train_config.get("callbacks"):
@@ -283,7 +314,7 @@ def train(model_dir_path, train_config:dict, compiled_model:Model,
     ## Call the suffix so Path is {model_name}_final( .hdf5 | .weights.hdf5 )
     ## conditional on if the full Model object or just the weights are stored.
     best_model.rename(model_dir_path.joinpath(
-        train_config.get("model_name")+"_final"+"".join(
+        model_name+"_final"+"".join(
             [s for s in best_model.suffixes if s in (".weights",".hdf5",".h5")]
             )))
     return best_model
