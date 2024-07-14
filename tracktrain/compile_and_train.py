@@ -258,10 +258,13 @@ def train(model_dir_path, train_config:dict, compiled_model:Model,
     halt_metric = train_config.get("early_stop_metric")
     if train_config.get("save_weights_only"):
         out_path = model_dir_path.joinpath(
-                model_name + "_{epoch:03}_{val_loss:.3f}.weights.h5")
+                model_name +
+                "_{epoch:03}_{loss:.3f}.weights.h5"
+                )
     else:
         out_path = model_dir_path.joinpath(
-                model_name + "_{epoch:03}_{val_loss:.03f}.h5")
+                model_name+"_{epoch:03}_{loss:.03f}.h5"
+                )
 
     ## Mandatory callbacks for ModelDir system
     callbacks = {
@@ -283,26 +286,31 @@ def train(model_dir_path, train_config:dict, compiled_model:Model,
     for c in train_config.get("callbacks"):
         c = [callbacks[c] if c in callbacks.keys() else c]
 
+    train_data = gen_training.batch(train_config.get("batch_size"))
+    train_data = train_data.prefetch(train_config.get("batch_buffer"))
+    val_data = gen_validation.batch(train_config.get("batch_size"))
+    val_data = val_data.prefetch(train_config.get("batch_buffer"))
+
+    if train_config.get("repeat_data"):
+        train_data = train_data.repeat()
+        val_data = val_data.repeat()
+
     ## Train the model on the generated tensors
     hist = compiled_model.fit(
-            gen_training.batch(
-                train_config.get("batch_size")
-                ).prefetch(train_config.get("batch_buffer")),
-            epochs=train_config.get("max_epochs"),
-            ## Number of batches to draw per epoch. Use full dataset by default
-            #steps_per_epoch=train_config.get("train_steps_per_epoch"),
-            validation_data=gen_validation.batch(
-                train_config.get("batch_size")
-                ).prefetch(train_config.get("batch_buffer")),
-            ## batches of validation data to draw per epoch
-            #validation_steps=train_config.get("val_steps_per_epoch"),
-            ## Number of epochs to wait between validation runs.
-            validation_freq=train_config.get("val_frequency"),
-            callbacks=callbacks,
-            steps_per_epoch=train_config.get("steps_per_epoch"),
-            validation_steps=train_config.get("validation_steps"),
-            verbose=2,
-            )
+        train_data,
+        epochs=train_config.get("max_epochs"),
+        ## Number of batches to draw per epoch. Use full dataset by default
+        #steps_per_epoch=train_config.get("train_steps_per_epoch"),
+        validation_data=val_data,
+        ## batches of validation data to draw per epoch
+        #validation_steps=train_config.get("val_steps_per_epoch"),
+        ## Number of epochs to wait between validation runs.
+        validation_freq=train_config.get("val_frequency"),
+        callbacks=callbacks,
+        steps_per_epoch=train_config.get("steps_per_epoch"),
+        validation_steps=train_config.get("validation_steps"),
+        verbose=2,
+        )
 
     ## Save the most performant model from the last checkpoint
     ## (!!!) This relies on the checkpoint file name formatting string, (!!!)

@@ -110,11 +110,11 @@ class ModelDir:
                 custom_metrics=custom_metrics,
                 print_summary=print_summary,
                 )
-        md = ModelDir(model_dir_path)
+        md = ModelDir(model_dir_path, custom_model_builders=tmp_model_builders)
         md._check_req_files()
         return model,md
 
-    def __init__(self, model_dir:Path):
+    def __init__(self, model_dir:Path, custom_model_builders={}):
         """ Initialize a ModelDir from an existing directory """
         self.name = model_dir.name
         self.dir = model_dir
@@ -126,6 +126,8 @@ class ModelDir:
                 self.dir.joinpath(f"{self.name}_summary.txt"),
                 self.dir.joinpath(f"{self.name}_config.json"),
                 )
+        self.model_builders = model_builders
+        self.model_builders.update(custom_model_builders)
         self.path_summary,self.path_config = self.req_files
         self.path_prog = self.dir.joinpath(f"{self.name}_prog.csv")
         ## final model should be stored as either weights or a serialized Model
@@ -200,12 +202,15 @@ class ModelDir:
         #assert load_path.exists()
         if not weights_path is None:
             weights_path = Path(weights_path)
-        if self.config.get("model_type") not in model_builders.keys():
-            raise ValueError(f"model_type = {self.config.get('model_typ')}"
-                             f" must be one of {list(model_builders.keys())}")
-        model = model_builders.get(self.config.get("model_type"))(self.config)
+        if self.config.get("model_type") not in self.model_builders.keys():
+            raise ValueError(
+                    f"model_type={self.config.get('model_type')} must be in ",
+                    list(self.model_builders.keys()))
+        model = self.model_builders.get(
+                self.config.get("model_type")
+                )(self.config.get("model"))
         if weights_path is None:
-            print(self.path_final_weights)
+            #print(self.path_final_weights)
             if not self.path_final_weights.exists():
                 raise ValueError(
                         f"No final weights found in {self.dir.as_posix()}")
