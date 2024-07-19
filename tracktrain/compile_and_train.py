@@ -80,7 +80,7 @@ if len(gpus):
     tf.config.experimental.set_memory_growth(gpus[0], True)
 '''
 def compile_from_config(model, compile_config:dict,
-        custom_losses:dict={}, custom_metrics:dict={}):
+        custom_losses:dict={}, custom_metrics:dict={},):
     """
     Given an initialized Model object, Verify that the keys required to specify
     a loss function and any metrics are present and map to valid options, then
@@ -95,8 +95,11 @@ def compile_from_config(model, compile_config:dict,
     "metrics":
         List of strings representing metrics to record per keras labels
 
-    :@param custom_losses: Dictionary of valid custom loss functions
-    :@param custom_metrics: Dictionary of valid custom metric functions
+    :@param model:
+    :@param compile_config:
+    :@param custom_losses: Dict mapping unique strings to valid custom loss
+        functions with argument signature (labels, predictions)
+    :@param custom_metrics: Dict mapping unique keys to custom metric functions
     """
     compile_config = {**compile_arg_defaults, **compile_config}
     validate_keys(
@@ -122,11 +125,15 @@ def compile_from_config(model, compile_config:dict,
     if type(loss_fn) is str:
         raise ValueError(f"{loss_fn} is not a valid loss function argument")
 
+    opt = tf.keras.optimizers.deserialize({
+        "class_name":compile_config.get("optimizer"),
+        "config":{ "learning_rate":compile_config.get("learning_rate") },
+        })
+
     ## Compile the model according to the provided args. assume Adam for
     ## optimizer, though may want to look into sequence optimization later
     model.compile(
-            optimizer=tf.keras.optimizers.Adam(
-                learning_rate=compile_config.get("learning_rate")),
+            optimizer=opt,
             metrics=metrics,
             loss=loss_fn,
             ## weighted metrics no longer supported; use the third argument
@@ -199,7 +206,8 @@ def compile_and_build_dir(
     return model,model_dir_path
 
 def train(model_dir_path, train_config:dict, compiled_model:Model,
-          gen_training:Iterator, gen_validation:Iterator):
+          gen_training:Iterator, gen_validation:Iterator,
+          custom_lr_schedulers:dict={}):
     """
     Execute the training pipeline according to the provided configuration
     to fit the compiled_model using a TensorFlow Dataset instance returned by
@@ -241,6 +249,9 @@ def train(model_dir_path, train_config:dict, compiled_model:Model,
         training arguments listed above.
     :@param gen_training: tf.data.Dataset (only tested using from_generator)
     :@pram gen_validation: tf.data.Dataset (only tested using from_generator)
+    :@param custom_lr_schedulers: Dict mapping unique keys to learning rate
+        scheduler functions, which map epoch indeces and the current learning
+        rate to a new learning rate.
     """
     assert model_dir_path.exists()
     #assert model_dir_path.name == train_config.get("model_name")
@@ -281,10 +292,14 @@ def train(model_dir_path, train_config:dict, compiled_model:Model,
             "csv_logger":tf.keras.callbacks.CSVLogger(
                 model_dir_path.joinpath(
                     f"{model_name}_prog.csv"),
-                )
+                ),
             }
-    for c in train_config.get("callbacks"):
-        c = [callbacks[c] if c in callbacks.keys() else c]
+
+    if not train_config.get("lr_scheduler") is None:
+        lrs = custom_lr_schedulers[train_config.get("lr_scheduler")]
+        callbacks.update({
+            "lr_scheduler":tf.keras.callbacks.LearningRateScheduler(lrs)
+            })
 
     train_data = gen_training.batch(train_config.get("batch_size"))
     train_data = train_data.prefetch(train_config.get("batch_buffer"))

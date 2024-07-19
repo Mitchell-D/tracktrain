@@ -71,7 +71,8 @@ class ModelDir:
     """
     @staticmethod
     def build_from_config(config, model_parent_dir:Path, print_summary=True,
-            custom_model_builders={}, custom_losses={}, custom_metrics={}):
+            custom_model_builders={}, custom_losses={}, custom_metrics={},
+            custom_lr_schedulers={}):
         """
         Initialize a model according to the configured model_type, which must
         be one of the keys in tracktrain.ModelDir.model_builders.
@@ -329,12 +330,15 @@ class ModelSet:
         model directory
         """
         model_dirs = [
-                ModelDir(d) for d in model_parent_dir.iterdir() if d.is_dir()
+                ModelDir(d)
+                for d in Path(model_parent_dir).iterdir()
+                if d.is_dir()
                 ]
         return ModelSet(model_dirs=model_dirs)
 
     def __init__(self, model_dirs:list, check_valid=True):
         """ """
+        assert all(type(m) is ModelDir for m in model_dirs)
         ## Validate all ModelDir objects unless check_valid is False
         assert check_valid or all(m._check_req_files() for m in model_dirs)
         self._model_dirs = tuple(model_dirs)
