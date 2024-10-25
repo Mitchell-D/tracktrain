@@ -18,6 +18,9 @@ from pathlib import Path
 from itertools import chain
 from collections.abc import Callable
 import tensorflow as tf
+import h5py
+from tensorflow.python.keras.saving.hdf5_format \
+        import load_weights_from_hdf5_group
 import matplotlib.pyplot as plt
 
 from tracktrain import utils
@@ -215,12 +218,16 @@ class ModelDir:
             if not self.path_final_weights.exists():
                 raise ValueError(
                         f"No final weights found in {self.dir.as_posix()}")
-            model.load_weights(self.path_final_weights)
-        else:
-            if weights_path.name in (p.name for p in self.dir.iterdir()):
-                model.load_weights(self.dir.joinpath(weights_path.name))
-            else:
-                model.load_weights(weights_path)
+            weights_path = self.path_final_weights
+        elif weights_path.name in (p.name for p in self.dir.iterdir()):
+            weights_path = self.dir.joinpath(weights_path.name)
+        try:
+            model.load_weights(weights_path)
+        except ValueError as e:
+            print(f"IGNORING COMPATIBILITY ERROR:\n{e}")
+            print(f"Loading using tensorflow 15 style")
+            with h5py.File(weights_path, 'r') as f:
+                load_weights_from_hdf5_group(f["layers"], model.layers)
         return model
 
     @property
