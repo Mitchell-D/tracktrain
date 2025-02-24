@@ -120,6 +120,8 @@ class ModelDir:
 
     def __init__(self, model_dir:Path, custom_model_builders={}):
         """ Initialize a ModelDir from an existing directory """
+        if type(model_dir) == str:
+            model_dir = Path(model_dir)
         self.name = model_dir.name
         self.dir = model_dir
         children = [
@@ -446,7 +448,8 @@ class ModelSet:
         ps = {"xlabel":"epoch", "ylabel":"", "title":"", "cmap":"Set1",
               "text_size":12, "norm":"linear", "logx":False, "figsize":(16,12),
               "plot_kwargs":{}, "xlim":None, "ylim":None, "line_width":2,
-              "facecolor":"white", "legend_cols":1,}
+              "facecolor":"white", "legend_cols":1, "fontsize_legend":12,
+              "fontsize_title":16, "fontsize_labels":12,}
         line_styles = ("-", ":", "--", "-.")
         ps = {**ps, **plot_spec}
         fig,ax = plt.subplots()
@@ -459,7 +462,8 @@ class ModelSet:
                 if use_notes:
                     label += md.config.get("notes") + " - "
                 label += m
-                ax.plot(md.get_metric("epoch"),
+                lineplot = ax.plot(
+                        md.get_metric("epoch"),
                         md.get_metric(m),
                         linewidth=ps.get("line_width"),
                         label=label,
@@ -467,12 +471,15 @@ class ModelSet:
                         linestyle=line_styles[j%len(line_styles)],
                         **ps.get("plot_kwargs"),
                         )
-        ax.legend(ncols=ps.get("legend_cols"))
+        legend = ax.legend(
+                ncols=ps.get("legend_cols"),
+                fontsize=ps.get("fontsize_legend"),
+                )
         if ps["logx"]:
             plt.semilogx()
-        ax.set_title(ps.get("title"))
-        ax.set_xlabel(ps.get("xlabel"))
-        ax.set_ylabel(ps.get("ylabel"))
+        ax.set_title(ps.get("title"), fontsize=ps.get("fontsize_title"))
+        ax.set_xlabel(ps.get("xlabel"), fontsize=ps.get("fontsize_labels"))
+        ax.set_ylabel(ps.get("ylabel"), fontsize=ps.get("fontsize_labels"))
         ax.set_facecolor(ps.get("facecolor"))
         if not ps.get("xlim") is None:
             ax.set_xlim(*ps["xlim"])
@@ -482,7 +489,7 @@ class ModelSet:
             plt.show()
         if not fig_path is None:
             fig.set_size_inches(*ps.get("figsize"))
-            fig.savefig(fig_path.as_posix(), bbox_inches="tight",dpi=80)
+            fig.savefig(fig_path.as_posix(), bbox_inches="tight", dpi=80)
 
 
 if __name__=="__main__":

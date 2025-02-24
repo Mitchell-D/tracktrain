@@ -52,8 +52,9 @@ def load_csv_prog(csv_path, as_array=False):
     csv_lines = list(map(lambda l:l.strip().split(","), csv_lines))
     csv_labels = csv_lines.pop(0)
     csv_cols = list(map(
-        lambda l:np.asarray([float(v) for v in l]),
-        zip(*csv_lines)))
+        lambda l:np.asarray([float(v) if v!="NA" else np.nan for v in l]),
+        zip(*csv_lines)
+        ))
     if not as_array:
         return dict(zip(csv_labels, csv_cols))
     return csv_labels, np.stack(csv_cols, axis=-1)
